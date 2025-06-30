@@ -1,0 +1,212 @@
+"""
+Web search tool using Tavily API for AI-optimized search results.
+"""
+
+import asyncio
+import logging
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
+import os
+from tavily import TavilyClient
+import structlog
+
+logger = structlog.get_logger()
+
+
+@dataclass
+class SearchResult:
+    """Structured search result from Tavily API."""
+    title: str
+    url: str
+    content: str
+    score: float
+    published_date: Optional[str] = None
+
+
+@dataclass
+class SearchResponse:
+    """Complete search response with metadata."""
+    query: str
+    results: List[SearchResult]
+    answer: Optional[str] = None
+    follow_up_questions: List[str] = None
+    search_context: Optional[str] = None
+    images: List[Dict[str, str]] = None
+
+
+class WebSearchTool:
+    """Tavily-powered web search tool optimized for AI agents."""
+    
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv("TAVILY_API_KEY")
+        if not self.api_key:
+            raise ValueError("Tavily API key not found. Set TAVILY_API_KEY environment variable")
+        
+        self.client = TavilyClient(api_key=self.api_key)
+        self.logger = logger.bind(tool="web_search")
+        
+    async def search(
+        self, 
+        query: str, 
+        max_results: int = 5, 
+        search_depth: str = "basic", 
+        include_answer: bool = True, 
+        include_images: bool = False, 
+        include_raw_content: bool = False, 
+        days: Optional[int] = None
+    ) -> SearchResponse:
+        """
+        Perform web search using Tavily API.
+        
+        Args:
+            query: The search query
+            max_results: Maximum number of results to return
+            search_depth: "basic" or "advanced" search depth
+            include_answer: Whether to include AI-generated answer
+            include_images: Whether to include image results
+            include_raw_content: Whether to include raw HTML content
+            days: Limit results to past N days
+            
+        Returns:
+            SearchResponse with results and metadata
+        """
+        self.logger.info("Performing web search", query=query, max_results=max_results)
+        
+        try:
+            # Run Tavily search in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.search(
+                    query=query,
+                    search_depth=search_depth,
+                    max_results=max_results,
+                    include_answer=include_answer,
+                    include_images=include_images,
+                    include_raw_content=include_raw_content,
+                    days=days
+                )
+            )
+            
+            # Parse results into structured format
+            results = []
+            for result in response.get("results", []):
+                search_result = SearchResult(
+                    title=result.get("title", ""),
+                    url=result.get("url", ""),
+                    content=result.get("content", ""),
+                    score=float(result.get("score", 0.0)),
+                    published_date=result.get("published_date")
+                )
+                results.append(search_result)
+            
+            search_response = SearchResponse(
+                query=query,
+                results=results,
+                answer=response.get("answer") if include_answer else None,
+                follow_up_questions=response.get("follow_up_questions", []),
+                search_context=response.get("search_context"),
+                images=response.get("images", []) if include_images else None
+            )
+            
+            self.logger.info(
+                "Web search completed", 
+                query=query, 
+                results_count=len(results),
+                has_answer=bool(search_response.answer)
+            )
+            
+            return search_response
+            
+        except Exception as e:
+            self.logger.error("Web search failed", query=query, error=str(e))
+            raise RuntimeError(f"Web search failed: {str(e)}") from e
+    
+    async def get_search_context(
+        self, 
+        query: str, 
+        max_results: int = 5, 
+        search_depth: str = "basic"
+    ) -> str:
+        """
+        Get search context optimized for RAG applications.
+        
+        Args:
+            query: The search query
+            max_results: Maximum number of results
+            search_depth: Search depth level
+            
+        Returns:
+            Concatenated search context suitable for RAG
+        """
+        self.logger.info("Getting search context", query=query)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            context = await loop.run_in_executor(
+                None,
+                lambda: self.client.get_search_context(
+                    query=query,
+                    search_depth=search_depth,
+                    max_results=max_results
+                )
+            )
+            
+            self.logger.info("Search context retrieved", query=query, context_length=len(context))
+            return context
+            
+        except Exception as e:
+            self.logger.error("Failed to get search context", query=query, error=str(e))
+            raise RuntimeError(f"Failed to get search context: {str(e)}") from e
+    
+    async def qna_search(self, query: str) -> str:
+        """
+        Get a direct answer to a question using Tavily's QnA feature.
+        
+        Args:
+            query: The question to answer
+            
+        Returns:
+            Direct answer string
+        """
+        self.logger.info("Performing QnA search", query=query)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            answer = await loop.run_in_executor(
+                None,
+                lambda: self.client.qna_search(query=query)
+            )
+            
+            self.logger.info("QnA search completed", query=query, answer_length=len(answer))
+            return answer
+            
+        except Exception as e:
+            self.logger.error("QnA search failed", query=query, error=str(e))
+            raise RuntimeError(f"QnA search failed: {str(e)}") from e
+    
+    async def extract_url_content(self, url: str) -> str:
+        """
+        Extract content from a specific URL using Tavily.
+        
+        Args:
+            url: The URL to extract content from
+            
+        Returns:
+            Extracted content as string
+        """
+        self.logger.info("Extracting URL content", url=url)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            content = await loop.run_in_executor(
+                None,
+                lambda: self.client.extract(url=url)
+            )
+            
+            self.logger.info("URL content extracted", url=url, content_length=len(content))
+            return content
+            
+        except Exception as e:
+            self.logger.error("URL content extraction failed", url=url, error=str(e))
+            raise RuntimeError(f"URL content extraction failed: {str(e)}") from e

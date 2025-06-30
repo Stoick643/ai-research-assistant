@@ -1,0 +1,50 @@
+{
+  "answer": "Artificial Intelligence (AI) is experiencing rapid growth and transformation in 2025, with key trends including the widespread adoption of generative AI, advances in multimodal AI systems, increased focus on AI safety and governance, edge AI deployment, and the integration of AI with emerging technologies like quantum computing and robotics.",
+  "query": "AI trends 2025",
+  "follow_up_questions": [
+    "What are the specific applications of generative AI in 2025?",
+    "How is AI governance evolving in different countries?",
+    "What are the main challenges in AI safety research?",
+    "Which industries are leading in AI adoption?",
+    "What role does edge computing play in AI deployment?"
+  ],
+  "search_context": "The search results provide comprehensive information about artificial intelligence trends in 2025, covering technological advances, industry adoption, regulatory developments, and future outlook.",
+  "results": [
+    {
+      "title": "Top AI Trends Shaping 2025: Generative AI and Beyond",
+      "url": "https://example.com/ai-trends-2025",
+      "content": "The year 2025 marks a pivotal moment for artificial intelligence, with generative AI moving from experimental technology to mainstream business tool. Organizations across industries are implementing AI-powered solutions to enhance productivity, automate complex processes, and create new customer experiences. Key developments include the emergence of multimodal AI systems that can process text, images, audio, and video simultaneously, leading to more sophisticated applications in content creation, data analysis, and decision-making. The integration of AI with existing enterprise systems is becoming more seamless, with improved APIs and standardized frameworks enabling easier deployment and management.",
+      "score": 0.95,
+      "published_date": "2024-12-15"
+    },
+    {
+      "title": "AI Safety and Governance: Critical Developments in 2025",
+      "url": "https://example.com/ai-safety-governance-2025",
+      "content": "As AI capabilities continue to expand, 2025 has seen unprecedented focus on AI safety and governance frameworks. Major technology companies are investing heavily in AI alignment research, developing systems that better understand and follow human intentions. Regulatory bodies worldwide are implementing comprehensive AI legislation, with the EU's AI Act serving as a model for other regions. Key safety measures include robust testing protocols for AI models before deployment, improved interpretability techniques to understand AI decision-making processes, and the development of AI oversight mechanisms. Organizations are also prioritizing ethical AI practices, ensuring fairness, transparency, and accountability in their AI implementations.",
+      "score": 0.92,
+      "published_date": "2024-11-28"
+    },
+    {
+      "title": "Edge AI and Distributed Computing: The 2025 Revolution",
+      "url": "https://example.com/edge-ai-2025",
+      "content": "Edge AI is transforming how artificial intelligence is deployed and utilized in 2025, moving processing power closer to data sources and end users. This shift enables real-time AI applications with reduced latency, improved privacy, and lower bandwidth requirements. Manufacturing industries are leveraging edge AI for predictive maintenance and quality control, while healthcare systems use it for real-time patient monitoring and diagnostic assistance. Smart cities are implementing edge AI for traffic management, energy optimization, and public safety. The proliferation of 5G networks is accelerating edge AI adoption, providing the necessary infrastructure for high-speed, low-latency AI applications at scale.",
+      "score": 0.88,
+      "published_date": "2024-12-02"
+    },
+    {
+      "title": "Quantum-AI Integration and Future Computing Paradigms",
+      "url": "https://example.com/quantum-ai-integration-2025",
+      "content": "The convergence of quantum computing and artificial intelligence is beginning to show practical applications in 2025, particularly in optimization problems, drug discovery, and financial modeling. Hybrid quantum-classical AI systems are being developed to leverage the strengths of both technologies, with quantum processors handling specific computational tasks while classical systems manage overall workflow and user interfaces. Research institutions and technology companies are collaborating on quantum machine learning algorithms that could potentially solve problems currently intractable for classical computers. While full-scale quantum AI systems remain in development, proof-of-concept implementations are demonstrating significant potential for breakthrough applications in scientific research and complex problem-solving.",
+      "score": 0.83,
+      "published_date": "2024-10-20"
+    },
+    {
+      "title": "Industry-Specific AI Applications: Healthcare, Finance, and Manufacturing",
+      "url": "https://example.com/industry-ai-applications-2025",
+      "content": "Different industries are adopting AI technologies at varying paces and with distinct use cases in 2025. Healthcare leads in AI implementation with diagnostic AI systems achieving clinical-grade accuracy, personalized treatment planning algorithms, and AI-powered drug discovery platforms reducing development timelines. Financial services are deploying AI for fraud detection, algorithmic trading, risk assessment, and personalized banking experiences. Manufacturing industries are integrating AI into supply chain optimization, predictive maintenance systems, and automated quality control processes. Retail and e-commerce sectors are using AI for demand forecasting, personalized recommendations, and inventory management. The common thread across industries is the focus on AI solutions that deliver measurable business value and improve operational efficiency.",
+      "score": 0.81,
+      "published_date": "2024-11-10"
+    }
+  ],
+  "images": []
+}

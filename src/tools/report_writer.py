@@ -17,7 +17,7 @@ class ReportWriter(ABC):
     """Abstract base class for report writers."""
     
     @abstractmethod
-    async def save_report(self, content: str, filename: str, metadata: Optional[Dict[str, Any]] = None) -> str:
+    async def save_report(self, content: str, filename: str, metadata: Optional[Dict[str, Any]] = None, langCode: Optional[str] = None) -> str:
         """
         Save report and return file path.
         
@@ -39,7 +39,7 @@ class MarkdownWriter(ReportWriter):
         self.output_dir = Path(output_dir)
         self.logger = logger.bind(writer="markdown")
         
-    async def save_report(self, content: str, filename: str, metadata: Optional[Dict[str, Any]] = None) -> str:
+    async def save_report(self, content: str, filename: str, metadata: Optional[Dict[str, Any]] = None, langCode: Optional[str] = None) -> str:
         """
         Save markdown report to file.
         
@@ -47,6 +47,7 @@ class MarkdownWriter(ReportWriter):
             content: The markdown content to save
             filename: Base filename (without extension)
             metadata: Optional metadata to include in the report
+            langCode: Optional language code for multilingual reports
             
         Returns:
             Full path to the saved markdown file
@@ -57,7 +58,10 @@ class MarkdownWriter(ReportWriter):
         # Generate timestamped filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_filename = self._sanitize_filename(filename)
-        full_filename = f"{safe_filename}_{timestamp}.md"
+        if langCode:
+            full_filename = f"{safe_filename}_{timestamp}_{langCode}.md"
+        else:
+            full_filename = f"{safe_filename}_{timestamp}.md"
         file_path = self.output_dir / full_filename
         
         # Add metadata to content if provided

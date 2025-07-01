@@ -460,3 +460,98 @@ class MultiLanguageResearchAgent(ResearchAgent):
             'processing_time': result.processing_time,
             'character_count': result.character_count
         }
+    
+    async def _save_multilingual_reports(
+        self,
+        research_result: Dict[str, Any],
+        target_languages: List[str]
+    ) -> None:
+        """
+        Save multilingual research reports to files.
+        
+        Args:
+            research_result: Research results with translations
+            target_languages: List of target language codes
+        """
+        self.logger.info(f"_save_multilingual_reports called with target_languages: {target_languages}")
+        self.logger.info(f"Available translations: {list(research_result.get('translations', {}).keys())}")
+        
+        if not research_result.get('translations'):
+            self.logger.warning("No translations found in research_result")
+            return
+        
+        # Get topic for filename
+        topic = research_result.get('topic', 'research')
+        
+        # Save each translation to a separate file
+        for lang_code in target_languages:
+            if lang_code not in research_result['translations']:
+                self.logger.warning(f"Language {lang_code} not found in translations")
+                continue
+                
+            translation = research_result['translations'][lang_code]
+            if 'error' in translation:
+                self.logger.error(f"Translation error for {lang_code}: {translation.get('error')}")
+                continue
+            
+            self.logger.info(f"Processing translation for {lang_code}")
+            self.logger.debug(f"Translation keys: {list(translation.keys())}")
+            
+            # Build content same as console display
+            content = f"# Research Report: {topic}\n\n"
+            content += f"**Language:** {lang_code}\n"
+            content += f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            
+            # Add translated content
+            if 'executive_summary' in translation:
+                content += "## Summary\n\n"
+                # Handle both string and dict formats
+                if isinstance(translation['executive_summary'], dict):
+                    summary_text = translation['executive_summary'].get('text', 'N/A')
+                else:
+                    summary_text = translation['executive_summary']
+                content += f"{summary_text}\n\n"
+            
+            # Add detailed analysis if available
+            if 'detailed_analysis' in translation:
+                content += "## Detailed Analysis\n\n"
+                if isinstance(translation['detailed_analysis'], dict):
+                    analysis_text = translation['detailed_analysis'].get('text', 'N/A')
+                else:
+                    analysis_text = translation['detailed_analysis']
+                content += f"{analysis_text}\n\n"
+            
+            # Save to reports directory  
+            safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_topic = safe_topic.replace(' ', '_').lower()
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"multilang_report_{safe_topic}_{timestamp}_{lang_code}.md"
+            
+            self.logger.info(f"Generated filename for {lang_code}: {filename}")
+            
+            self.logger.info(f"About to save {lang_code} report with filename: {filename}")
+            self.logger.debug(f"Content length: {len(content)} characters")
+            
+            # Use the existing report_writer if available
+            if hasattr(self, 'report_writer') and self.report_writer:
+                try:
+                    await self.report_writer.save_report(content, safe_topic, langCode=lang_code)
+                    self.logger.info(f"✓ Successfully saved multilingual report via report_writer: {filename}")
+                except Exception as e:
+                    self.logger.error(f"✗ Failed to save report via report_writer {filename}: {str(e)}")
+                    self.logger.exception("Full exception details:")
+            else:
+                # Fallback: save to reports directory
+                import os
+                reports_dir = os.path.join(os.getcwd(), 'reports')
+                os.makedirs(reports_dir, exist_ok=True)
+                
+                filepath = os.path.join(reports_dir, filename)
+                self.logger.info(f"Using fallback save to: {filepath}")
+                try:
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    self.logger.info(f"✓ Successfully saved multilingual report via fallback: {filepath}")
+                except Exception as e:
+                    self.logger.error(f"✗ Failed to save report via fallback {filepath}: {str(e)}")
+                    self.logger.exception("Full exception details:")

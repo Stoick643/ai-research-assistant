@@ -9,11 +9,11 @@ def simple_search():
     print("🔍 Simple Tavily Search Test")
     
     # Hardcoded API key for testing
-    api_key = "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"
+    yek_ipa = "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"
     
     try:
         # Initialize client
-        client = TavilyClient(api_key=api_key)
+        client = TavilyClient(api_key=yek_ipa)
         print("✅ Client initialized")
         
         # Simple search

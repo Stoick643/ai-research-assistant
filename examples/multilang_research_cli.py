@@ -520,4 +520,10 @@ def research(
 
 
 if __name__ == "__main__":
-    app()
+    try:
+        app()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Application terminated by user.[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Fatal error:[/red] {str(e)}")
+        sys.exit(1)

@@ -12,6 +12,7 @@ import structlog
 from ..tools.report_writer import ReportWriter
 from .database import DatabaseManager
 from .models import Research, Query, Source
+from ..utils.llm import normalize_text
 
 logger = structlog.get_logger()
 
@@ -54,21 +55,40 @@ class SQLiteWriter(ReportWriter):
             if not research_data:
                 raise ValueError("Research data required in metadata")
             
+            # Normalize all text content to handle Unicode issues
+            content = normalize_text(content)
+            
             # Create research record
             with self.db_manager.get_session() as session:
+                # Normalize all text fields
+                topic = normalize_text(research_data.get("topic", "Unknown Topic"))
+                agent_name = normalize_text(research_data.get("agent_name", "Unknown Agent"))
+                executive_summary = normalize_text(research_data.get("executive_summary", ""))
+                detailed_analysis = normalize_text(research_data.get("detailed_analysis", ""))
+                report_path = normalize_text(research_data.get("report_path", ""))
+                
+                # Normalize focus areas and key findings lists
+                focus_areas = research_data.get("focus_areas")
+                if focus_areas:
+                    focus_areas = [normalize_text(area) for area in focus_areas]
+                
+                key_findings = research_data.get("key_findings", [])
+                if key_findings:
+                    key_findings = [normalize_text(finding) for finding in key_findings]
+                
                 research = Research(
-                    topic=research_data.get("topic", "Unknown Topic"),
-                    focus_areas=research_data.get("focus_areas"),
-                    agent_name=research_data.get("agent_name", "Unknown Agent"),
+                    topic=topic,
+                    focus_areas=focus_areas,
+                    agent_name=agent_name,
                     started_at=research_data.get("started_at", datetime.utcnow()),
                     completed_at=research_data.get("completed_at", datetime.utcnow()),
                     processing_time=research_data.get("processing_time", 0.0),
                     status="completed",
-                    executive_summary=research_data.get("executive_summary"),
-                    key_findings=research_data.get("key_findings", []),
-                    detailed_analysis=research_data.get("detailed_analysis"),
+                    executive_summary=executive_summary if executive_summary else None,
+                    key_findings=key_findings,
+                    detailed_analysis=detailed_analysis if detailed_analysis else None,
                     report_content=content,
-                    report_path=research_data.get("report_path"),
+                    report_path=report_path if report_path else None,
                     total_queries=research_data.get("total_queries", 0),
                     total_sources=research_data.get("total_sources", 0),
                     research_metadata=research_data.get("additional_metadata", {})
@@ -81,21 +101,32 @@ class SQLiteWriter(ReportWriter):
                 # Save queries
                 queries_data = research_data.get("queries", [])
                 for i, query_data in enumerate(queries_data):
+                    # Normalize query text fields
+                    query_text = normalize_text(query_data.get("query_text", ""))
+                    ai_answer = normalize_text(query_data.get("ai_answer", ""))
+                    search_context = normalize_text(query_data.get("search_context", ""))
+                    error_message = normalize_text(query_data.get("error_message", ""))
+                    
+                    # Normalize follow-up questions
+                    follow_up_questions = query_data.get("follow_up_questions", [])
+                    if follow_up_questions:
+                        follow_up_questions = [normalize_text(q) for q in follow_up_questions]
+                    
                     query = Query(
                         research_id=research_id,
-                        query_text=query_data.get("query_text", ""),
+                        query_text=query_text,
                         query_order=i + 1,
                         executed_at=query_data.get("executed_at", datetime.utcnow()),
                         max_results=query_data.get("max_results", 5),
                         search_depth=query_data.get("search_depth", "basic"),
                         include_answer=query_data.get("include_answer", True),
                         results_count=query_data.get("results_count", 0),
-                        ai_answer=query_data.get("ai_answer"),
-                        follow_up_questions=query_data.get("follow_up_questions", []),
-                        search_context=query_data.get("search_context"),
+                        ai_answer=ai_answer if ai_answer else None,
+                        follow_up_questions=follow_up_questions,
+                        search_context=search_context if search_context else None,
                         execution_time=query_data.get("execution_time", 0.0),
                         success=query_data.get("success", True),
-                        error_message=query_data.get("error_message")
+                        error_message=error_message if error_message else None
                     )
                     session.add(query)
                     session.flush()  # Get the query ID
@@ -103,16 +134,22 @@ class SQLiteWriter(ReportWriter):
                     # Save sources for this query
                     sources_data = query_data.get("sources", [])
                     for source_data in sources_data:
+                        # Normalize source text fields
+                        title = normalize_text(source_data.get("title", ""))
+                        url = source_data.get("url", "")  # Don't normalize URLs
+                        content = normalize_text(source_data.get("content", ""))
+                        published_date = source_data.get("published_date")
+                        
                         source = Source(
                             research_id=research_id,
                             query_id=query.id,
-                            title=source_data.get("title", ""),
-                            url=source_data.get("url", ""),
-                            content=source_data.get("content", ""),
+                            title=title,
+                            url=url,
+                            content=content,
                             relevance_score=source_data.get("score", 0.0),
-                            published_date=source_data.get("published_date"),
+                            published_date=published_date,
                             retrieved_at=datetime.utcnow(),
-                            content_length=len(source_data.get("content", "")),
+                            content_length=len(content),
                             used_in_analysis=True  # Assume all retrieved sources were used
                         )
                         source.extract_domain()  # Extract domain from URL

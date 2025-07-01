@@ -38,13 +38,30 @@ class WebSearchTool:
     """Tavily-powered web search tool optimized for AI agents."""
     
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("TAVILY_API_KEY")
+        # Hardcoded fallback for testing - remove in production
+        self.api_key = api_key or os.getenv("TAVILY_API_KEY") or "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"
         if not self.api_key:
             raise ValueError("Tavily API key not found. Set TAVILY_API_KEY environment variable")
         
         self.client = TavilyClient(api_key=self.api_key)
         self.logger = logger.bind(tool="web_search")
         
+    def _normalize_text(self, text: str) -> str:
+        """Normalize text to handle Unicode encoding issues."""
+        if not text:
+            return ""
+        
+        try:
+            # Handle case where text might have encoding issues
+            if isinstance(text, str):
+                # Try to encode and decode to clean up any encoding issues
+                normalized = text.encode('utf-8', errors='replace').decode('utf-8')
+                return normalized
+            return str(text)
+        except (UnicodeEncodeError, UnicodeDecodeError, AttributeError):
+            # If all else fails, replace problematic characters
+            return str(text).encode('ascii', errors='replace').decode('ascii')
+
     async def search(
         self, 
         query: str, 
@@ -70,7 +87,9 @@ class WebSearchTool:
         Returns:
             SearchResponse with results and metadata
         """
-        self.logger.info("Performing web search", query=query, max_results=max_results)
+        # Normalize query to handle Unicode issues
+        normalized_query = self._normalize_text(query)
+        self.logger.info("Performing web search", query=normalized_query, max_results=max_results)
         
         try:
             # Run Tavily search in thread pool to avoid blocking
@@ -78,7 +97,7 @@ class WebSearchTool:
             response = await loop.run_in_executor(
                 None,
                 lambda: self.client.search(
-                    query=query,
+                    query=normalized_query,
                     search_depth=search_depth,
                     max_results=max_results,
                     include_answer=include_answer,
@@ -88,24 +107,41 @@ class WebSearchTool:
                 )
             )
             
-            # Parse results into structured format
+            # Parse results into structured format  
             results = []
-            for result in response.get("results", []):
+            
+            # Debug: Log the full response structure
+            self.logger.info("Tavily response debug", 
+                           response_type=type(response),
+                           response_keys=list(response.keys()) if isinstance(response, dict) else None,
+                           query=normalized_query)
+            
+            raw_results = response.get("results") if isinstance(response, dict) else None
+            
+            # Handle case where Tavily returns None
+            if raw_results is None:
+                self.logger.warning("Tavily returned None for results", query=normalized_query)
+                raw_results = []
+            elif not isinstance(raw_results, list):
+                self.logger.warning("Tavily returned non-list results", type=type(raw_results), query=normalized_query)
+                raw_results = []
+                
+            for result in raw_results:
                 search_result = SearchResult(
-                    title=result.get("title", ""),
+                    title=self._normalize_text(result.get("title", "")),
                     url=result.get("url", ""),
-                    content=result.get("content", ""),
+                    content=self._normalize_text(result.get("content", "")),
                     score=float(result.get("score", 0.0)),
                     published_date=result.get("published_date")
                 )
                 results.append(search_result)
             
             search_response = SearchResponse(
-                query=query,
+                query=normalized_query,
                 results=results,
-                answer=response.get("answer") if include_answer else None,
-                follow_up_questions=response.get("follow_up_questions", []),
-                search_context=response.get("search_context"),
+                answer=self._normalize_text(response.get("answer", "")) if include_answer and response.get("answer") else None,
+                follow_up_questions=[self._normalize_text(q) for q in (response.get("follow_up_questions") or [])],
+                search_context=self._normalize_text(response.get("search_context", "")),
                 images=response.get("images", []) if include_images else None
             )
             

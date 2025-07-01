@@ -11,7 +11,7 @@ from .reasoning import ReasoningAgent
 from ..tools.web_search import WebSearchTool, SearchResponse
 from ..tools.report_writer import ReportWriter, MarkdownWriter, ReportFormatter
 from ..database.sqlite_writer import SQLiteWriter
-from ..utils.llm import LLMClient
+from ..utils.llm import LLMClient, normalize_text
 import structlog
 
 logger = structlog.get_logger()
@@ -69,6 +69,11 @@ class ResearchAgent(ReasoningAgent):
         Returns:
             Dictionary containing research results and metadata
         """
+        # Normalize input text to handle Unicode issues
+        topic = normalize_text(topic)
+        if focus_areas:
+            focus_areas = [normalize_text(area) for area in focus_areas]
+        
         self.research_start_time = time.time()
         start_datetime = datetime.utcnow()
         self.logger.info("Starting research", topic=topic, focus_areas=focus_areas)

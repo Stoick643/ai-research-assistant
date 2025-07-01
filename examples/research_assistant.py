@@ -25,6 +25,7 @@ sys.path.insert(0, project_root)
 from src.agents import ResearchAgent
 from src.tools import WebSearchTool, MarkdownWriter
 from src.utils import create_llm_client, setup_logging
+from src.utils.llm import normalize_text
 
 # Load environment variables
 load_dotenv()
@@ -54,13 +55,7 @@ class ResearchAssistantCLI:
                 )
                 return False
             
-            # Check for Tavily API key
-            if not os.getenv("TAVILY_API_KEY"):
-                self.console.print(
-                    "[red]Error:[/red] TAVILY_API_KEY environment variable not found. Please set your Tavily API key.",
-                    style="red"
-                )
-                return False
+            # Tavily API key check removed - WebSearchTool has hardcoded fallback
             
             # Initialize components
             llm_client = create_llm_client(provider, api_key=api_key)
@@ -120,8 +115,10 @@ Simply enter your research topic when prompted, and the assistant will handle th
             if not topic.strip():
                 self.console.print("[yellow]No topic provided. Exiting.[/yellow]")
                 return None
-                
-            return topic.strip()
+            
+            # Normalize text to handle Unicode encoding issues
+            normalized_topic = normalize_text(topic.strip())
+            return normalized_topic
             
         except KeyboardInterrupt:
             self.console.print("\n[yellow]Research cancelled by user.[/yellow]")

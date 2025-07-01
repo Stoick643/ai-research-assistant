@@ -8,6 +8,23 @@ import structlog
 logger = structlog.get_logger()
 
 
+def normalize_text(text: str) -> str:
+    """Normalize text to handle Unicode encoding issues."""
+    if not text:
+        return ""
+    
+    try:
+        # Handle case where text might have encoding issues
+        if isinstance(text, str):
+            # Try to encode and decode to clean up any encoding issues
+            normalized = text.encode('utf-8', errors='replace').decode('utf-8')
+            return normalized
+        return str(text)
+    except (UnicodeEncodeError, UnicodeDecodeError, AttributeError):
+        # If all else fails, replace problematic characters
+        return str(text).encode('ascii', errors='replace').decode('ascii')
+
+
 class LLMClient(ABC):
     @abstractmethod
     async def generate(
@@ -47,9 +64,13 @@ class OpenAIClient(LLMClient):
         **kwargs
     ) -> str:
         try:
+            # Normalize input text to handle Unicode issues
+            normalized_system = normalize_text(system_prompt)
+            normalized_user = normalize_text(user_message)
+            
             messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
+                {"role": "system", "content": normalized_system},
+                {"role": "user", "content": normalized_user}
             ]
             
             response = await self.client.chat.completions.create(
@@ -60,7 +81,8 @@ class OpenAIClient(LLMClient):
                 **kwargs
             )
             
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            return normalize_text(content) if content else ""
             
         except Exception as e:
             logger.error("OpenAI API call failed", error=str(e))
@@ -89,18 +111,23 @@ class AnthropicClient(LLMClient):
         **kwargs
     ) -> str:
         try:
+            # Normalize input text to handle Unicode issues
+            normalized_system = normalize_text(system_prompt)
+            normalized_user = normalize_text(user_message)
+            
             response = await self.client.messages.create(
                 model=self.model,
                 max_tokens=max_tokens or 1000,
                 temperature=temperature,
-                system=system_prompt,
+                system=normalized_system,
                 messages=[
-                    {"role": "user", "content": user_message}
+                    {"role": "user", "content": normalized_user}
                 ],
                 **kwargs
             )
             
-            return response.content[0].text
+            content = response.content[0].text
+            return normalize_text(content) if content else ""
             
         except Exception as e:
             logger.error("Anthropic API call failed", error=str(e))

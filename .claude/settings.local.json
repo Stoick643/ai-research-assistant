@@ -3,7 +3,10 @@
     "allow": [
       "Bash(mkdir:*)",
       "Bash(source:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(grep:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:docs.anthropic.com)"
     ],
     "deny": []
   }

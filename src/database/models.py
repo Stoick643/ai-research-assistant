@@ -44,9 +44,16 @@ class Research(Base):
     error_message = Column(Text)
     research_metadata = Column(JSON)  # Additional metadata dictionary
     
+    # Translation metadata
+    original_language = Column(String(10), index=True)  # Language of original topic/query
+    research_language = Column(String(10), default='en', index=True)  # Language research was conducted in
+    translation_enabled = Column(Boolean, default=False)
+    translated_languages = Column(JSON)  # List of languages results were translated to
+    
     # Relationships
     queries = relationship("Query", back_populates="research", cascade="all, delete-orphan")
     sources = relationship("Source", back_populates="research", cascade="all, delete-orphan")
+    translations = relationship("Translation", back_populates="research", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Research(id={self.id}, topic='{self.topic}', status='{self.status}')>"
@@ -69,7 +76,11 @@ class Research(Base):
             "total_queries": self.total_queries,
             "total_sources": self.total_sources,
             "error_message": self.error_message,
-            "research_metadata": self.research_metadata
+            "research_metadata": self.research_metadata,
+            "original_language": self.original_language,
+            "research_language": self.research_language,
+            "translation_enabled": self.translation_enabled,
+            "translated_languages": self.translated_languages
         }
 
 
@@ -182,6 +193,56 @@ class Source(Base):
             self.domain = parsed.netloc.lower()
         except Exception:
             self.domain = "unknown"
+
+
+class Translation(Base):
+    """Translation tracking model for research content."""
+    
+    __tablename__ = "translations"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    research_id = Column(Integer, ForeignKey("research.id"), nullable=False, index=True)
+    
+    # Translation details
+    source_text = Column(Text, nullable=False)
+    translated_text = Column(Text, nullable=False)
+    source_language = Column(String(10), nullable=False, index=True)
+    target_language = Column(String(10), nullable=False, index=True)
+    
+    # Translation metadata
+    content_type = Column(String(50), nullable=False, index=True)  # topic, summary, analysis, finding
+    provider = Column(String(50), nullable=False)
+    confidence_score = Column(Float)
+    character_count = Column(Integer)
+    processing_time = Column(Float)  # Seconds
+    
+    # Tracking
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    cache_hit = Column(Boolean, default=False)
+    
+    # Relationships
+    research = relationship("Research", back_populates="translations")
+    
+    def __repr__(self):
+        return f"<Translation(id={self.id}, {self.source_language}->{self.target_language}, type='{self.content_type}')>"
+    
+    def to_dict(self):
+        """Convert translation record to dictionary."""
+        return {
+            "id": self.id,
+            "research_id": self.research_id,
+            "source_text": self.source_text,
+            "translated_text": self.translated_text,
+            "source_language": self.source_language,
+            "target_language": self.target_language,
+            "content_type": self.content_type,
+            "provider": self.provider,
+            "confidence_score": self.confidence_score,
+            "character_count": self.character_count,
+            "processing_time": self.processing_time,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "cache_hit": self.cache_hit
+        }
 
 
 # Database utility functions

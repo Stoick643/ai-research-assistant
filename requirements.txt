@@ -1,0 +1,32 @@
+# Production requirements for AI Research Assistant
+# Core Flask dependencies
+Flask==3.1.1
+flask-cors==6.0.1
+flask-wtf==1.2.1
+
+# LLM providers
+openai==1.93.0
+anthropic==0.56.0
+
+# Web search and translation
+tavily-python==0.7.9
+
+# Data processing and validation
+pydantic==2.11.7
+structlog==25.4.0
+
+# Async and retry logic
+tenacity==9.1.2
+
+# Database
+sqlalchemy==2.0.41
+
+# Environment management
+python-dotenv==1.1.1
+
+# Production server
+gunicorn==23.0.0
+
+# Optional: Redis for scaling (comment out if not using)
+# redis==5.2.1
+# celery==5.4.0

@@ -6,7 +6,14 @@
       "Bash(python:*)",
       "Bash(grep:*)",
       "Bash(rm:*)",
-      "WebFetch(domain:docs.anthropic.com)"
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(pip install:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(touch:*)",
+      "Bash(rg:*)"
     ],
     "deny": []
   }

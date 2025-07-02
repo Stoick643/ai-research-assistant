@@ -13,7 +13,8 @@
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(touch:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(PORT=5004 python3 app.py)"
     ],
     "deny": []
   }

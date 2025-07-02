@@ -114,15 +114,32 @@ class ImprovedLLMClient(ABC):
         except Exception as e:
             error_msg = str(e).lower()
             
-            # Check for quota/rate limit errors
-            if any(term in error_msg for term in ['quota', 'rate limit', '429', 'insufficient_quota']):
+            # Check for quota/rate limit errors (including tenacity RetryError)
+            is_quota_error = any(term in error_msg for term in [
+                'quota', 'rate limit', '429', 'insufficient_quota', 
+                'insufficient balance', '402', 'billing', 'limit exceeded',
+                'authentication_error', 'invalid x-api-key', '401'
+            ])
+            
+            # Also check if it's a tenacity RetryError wrapping a rate limit error
+            is_retry_error = False
+            if hasattr(e, 'last_attempt') and e.last_attempt:
+                if hasattr(e.last_attempt, 'exception') and e.last_attempt.exception:
+                    inner_error = str(e.last_attempt.exception()).lower()
+                    is_retry_error = any(term in inner_error for term in [
+                        'quota', 'rate limit', '429', 'insufficient_quota',
+                        'insufficient balance', '402', 'billing', 'limit exceeded',
+                        'authentication_error', 'invalid x-api-key', '401'
+                    ])
+            
+            if is_quota_error or is_retry_error:
                 logger.warning(f"Primary API quota/rate limit exceeded: {e}")
                 
                 if use_fallback and self.fallback_client:
                     logger.info("Attempting fallback API")
                     return await self.fallback_client.generate(
                         system_prompt, user_message, max_tokens, temperature, 
-                        use_fallback=False, **kwargs
+                        use_fallback=True, **kwargs  # Changed to True to allow chaining
                     )
                 else:
                     # No fallback available - implement graceful degradation

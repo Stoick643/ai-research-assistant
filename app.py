@@ -512,7 +512,11 @@ def create_production_app():
                             openai_model="gpt-4"
                         )
                         
-                        search_cache = SearchCache()
+                        from src.tools.embeddings import create_embedding_provider
+                        embedding_provider = create_embedding_provider(
+                            openai_api_key=resolved.get('openai_api_key')
+                        )
+                        search_cache = SearchCache(embedding_provider=embedding_provider)
                         web_search = WebSearchTool(api_key=resolved['tavily_api_key'], search_cache=search_cache)
                         report_writer = MarkdownWriter()
                         

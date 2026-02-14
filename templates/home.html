@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}AI Research Assistant - Multi-Language{% endblock %}
+
+{% block navbar_extra %}
+<span class="navbar-text text-light d-none d-md-block">
+    <small>{{ cost_status }}</small>
+</span>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-search me-2"></i>Start AI Research
+                </h4>
+                <small>Multi-language research with intelligent fallback system</small>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/submit_research" class="needs-validation" novalidate>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Research Topic</label>
+                        <textarea class="form-control form-control-lg" name="topic" rows="3" 
+                            placeholder="Enter your research topic (e.g., 'AI trends in 2025', 'Climate change solutions')" 
+                            required minlength="10"></textarea>
+                        <div class="invalid-feedback">
+                            Please enter a research topic with at least 10 characters.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Focus Areas (Optional)</label>
+                        <input type="text" class="form-control" name="focus_areas" 
+                            placeholder="Specific areas to focus on (comma-separated)">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">
+                                <i class="bi bi-translate me-1"></i>Research Language
+                            </label>
+                            <select class="form-select" name="language" required>
+                                <option value="en">English</option>
+                                <option value="sl">Slovenian (slovenski)</option>
+                                <option value="de">German (Deutsch)</option>
+                                <option value="fr">French (Français)</option>
+                                <option value="es">Spanish (Español)</option>
+                                <option value="it">Italian (Italiano)</option>
+                                <option value="pt">Portuguese (Português)</option>
+                                <option value="ru">Russian (Русский)</option>
+                                <option value="nl">Dutch (Nederlands)</option>
+                                <option value="sr">Serbian (Српски)</option>
+                                <option value="mk">Macedonian (Македонски)</option>
+                                <option value="hr">Croatian (Hrvatski)</option>
+                            </select>
+                            <small class="text-muted">Research will be conducted in English and translated to selected language</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Search Depth</label>
+                            <select class="form-select" name="depth" required>
+                                <option value="basic">Basic (Faster & Cheaper)</option>
+                                <option value="advanced">Advanced (More Thorough)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-play-circle me-2"></i>Start Research
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0">
+                    <i class="bi bi-cpu me-1"></i>System Status
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="small">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Primary LLM:</span>
+                        <span class="text-success fw-bold">{{ primary_provider.title() }}</span>
+                    </div>
+                    {% if fallback_provider %}
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>1st Fallback:</span>
+                        <span class="text-info">{{ fallback_provider.title() }}</span>
+                    </div>
+                    {% endif %}
+                    {% if final_fallback %}
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>2nd Fallback:</span>
+                        <span class="text-warning">{{ final_fallback.title() }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Rate Limiting:</span>
+                        <span class="text-success">✓ Active</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Translation:</span>
+                        <span class="text-success">✓ LLM-powered</span>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="alert alert-info p-2 mb-3">
+                    <small>
+                        <i class="bi bi-translate me-1"></i>
+                        <strong>Translation Features:</strong><br>
+                        • 12 Indo-European languages<br>
+                        • LLM-powered translation<br>
+                        • Bilingual report generation<br>
+                        • Cross-language analysis
+                    </small>
+                </div>
+                
+                <div class="small">
+                    <div class="d-flex justify-content-between">
+                        <span>System Health:</span>
+                        <span class="text-success">✓ Online</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Form validation
+    (function() {
+        'use strict';
+        window.addEventListener('load', function() {
+            var forms = document.getElementsByClassName('needs-validation');
+            Array.prototype.filter.call(forms, function(form) {
+                form.addEventListener('submit', function(event) {
+                    if (form.checkValidity() === false) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                }, false);
+            });
+        }, false);
+    })();
+</script>
+{% endblock %}

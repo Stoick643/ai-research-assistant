@@ -51,7 +51,7 @@ def check_requirements():
 def create_production_app():
     """Create production-optimized Flask app."""
     
-    from flask import Flask, render_template_string, request, redirect, url_for, flash, jsonify
+    from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
     from flask_cors import CORS
     
     app = Flask(__name__)
@@ -127,192 +127,17 @@ def create_production_app():
     
     @app.route('/')
     def home():
-        return render_template_string("""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>AI Research Assistant - Multi-Language</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="/">
-                <i class="bi bi-search me-2"></i>AI Research Assistant
-            </a>
-            <span class="navbar-text text-light d-none d-md-block">
-                <small>{{ cost_status }}</small>
-            </span>
-        </div>
-    </nav>
+        return render_template('home.html',
+            primary_provider=primary_provider,
+            fallback_provider=fallback_provider,
+            final_fallback=final_fallback,
+            cost_status=cost_status)
     
-    <div class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <div class="row">
-            <div class="col-lg-8">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-primary text-white">
-                        <h4 class="mb-0">
-                            <i class="bi bi-search me-2"></i>Start AI Research
-                        </h4>
-                        <small>Multi-language research with intelligent fallback system</small>
-                    </div>
-                    <div class="card-body">
-                        <form method="POST" action="/submit_research" class="needs-validation" novalidate>
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">Research Topic</label>
-                                <textarea class="form-control form-control-lg" name="topic" rows="3" 
-                                    placeholder="Enter your research topic (e.g., 'AI trends in 2025', 'Climate change solutions')" 
-                                    required minlength="10"></textarea>
-                                <div class="invalid-feedback">
-                                    Please enter a research topic with at least 10 characters.
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Focus Areas (Optional)</label>
-                                <input type="text" class="form-control" name="focus_areas" 
-                                    placeholder="Specific areas to focus on (comma-separated)">
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">
-                                        <i class="bi bi-translate me-1"></i>Research Language
-                                    </label>
-                                    <select class="form-select" name="language" required>
-                                        <option value="en">English</option>
-                                        <option value="sl">Slovenian (slovenski)</option>
-                                        <option value="de">German (Deutsch)</option>
-                                        <option value="fr">French (Français)</option>
-                                        <option value="es">Spanish (Español)</option>
-                                        <option value="it">Italian (Italiano)</option>
-                                        <option value="pt">Portuguese (Português)</option>
-                                        <option value="ru">Russian (Русский)</option>
-                                        <option value="nl">Dutch (Nederlands)</option>
-                                        <option value="sr">Serbian (Српски)</option>
-                                        <option value="mk">Macedonian (Македонски)</option>
-                                        <option value="hr">Croatian (Hrvatski)</option>
-                                    </select>
-                                    <small class="text-muted">Research will be conducted in English and translated to selected language</small>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Search Depth</label>
-                                    <select class="form-select" name="depth" required>
-                                        <option value="basic">Basic (Faster & Cheaper)</option>
-                                        <option value="advanced">Advanced (More Thorough)</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary btn-lg">
-                                    <i class="bi bi-play-circle me-2"></i>Start Research
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-lg-4">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-primary text-white">
-                        <h6 class="mb-0">
-                            <i class="bi bi-cpu me-1"></i>System Status
-                        </h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="small">
-                            <div class="d-flex justify-content-between mb-2">
-                                <span>Primary LLM:</span>
-                                <span class="text-success fw-bold">{{ primary_provider.title() }}</span>
-                            </div>
-                            {% if fallback_provider %}
-                            <div class="d-flex justify-content-between mb-2">
-                                <span>1st Fallback:</span>
-                                <span class="text-info">{{ fallback_provider.title() }}</span>
-                            </div>
-                            {% endif %}
-                            {% if final_fallback %}
-                            <div class="d-flex justify-content-between mb-2">
-                                <span>2nd Fallback:</span>
-                                <span class="text-warning">{{ final_fallback.title() }}</span>
-                            </div>
-                            {% endif %}
-                            <div class="d-flex justify-content-between mb-2">
-                                <span>Rate Limiting:</span>
-                                <span class="text-success">✓ Active</span>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Translation:</span>
-                                <span class="text-success">✓ 12 Languages</span>
-                            </div>
-                        </div>
-                        
-                        <hr>
-                        
-                        <div class="alert alert-info p-2 mb-3">
-                            <small>
-                                <i class="bi bi-translate me-1"></i>
-                                <strong>Translation Features:</strong><br>
-                                • 12 Indo-European languages<br>
-                                • Automatic language detection<br>
-                                • Bilingual report generation<br>
-                                • Cross-language analysis
-                            </small>
-                        </div>
-                        
-                        <div class="small">
-                            <div class="d-flex justify-content-between">
-                                <span>System Health:</span>
-                                <span class="text-success">✓ Online</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Form validation
-        (function() {
-            'use strict';
-            window.addEventListener('load', function() {
-                var forms = document.getElementsByClassName('needs-validation');
-                var validation = Array.prototype.filter.call(forms, function(form) {
-                    form.addEventListener('submit', function(event) {
-                        if (form.checkValidity() === false) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                        }
-                        form.classList.add('was-validated');
-                    }, false);
-                });
-            }, false);
-        })();
-    </script>
-</body>
-</html>
-        """, 
-        primary_provider=primary_provider,
-        fallback_provider=fallback_provider,
-        final_fallback=final_fallback,
-        cost_status=cost_status)
+    @app.route('/history')
+    def history():
+        """Show research history."""
+        researches = db.get_research_history(limit=100)
+        return render_template('history.html', researches=researches)
     
     @app.route('/submit_research', methods=['POST'])
     def submit_research():
@@ -460,10 +285,24 @@ def create_production_app():
     def research_progress(research_id):
         """Show research progress."""
         
-        research = db.get_research_by_id(research_id)
+        research = db.get_research_with_details(research_id)
+        if not research:
+            # Might be in-progress (not yet written to DB with details)
+            research = db.get_research_by_id(research_id)
         if not research:
             flash('Research not found.', 'error')
             return redirect(url_for('home'))
+        
+        # Collect unique sources across all queries, sorted by relevance
+        all_sources = []
+        seen_urls = set()
+        for q in research.get('queries', []):
+            for s in q.get('sources', []):
+                if s['url'] not in seen_urls:
+                    seen_urls.add(s['url'])
+                    all_sources.append(s)
+        all_sources.sort(key=lambda s: s.get('relevance_score', 0), reverse=True)
+        research['all_sources'] = all_sources
         
         # Merge transient progress info
         progress_info = progress_tracker.get(research_id, {})
@@ -493,122 +332,30 @@ def create_production_app():
             'temporarily_unavailable': 'Temporarily Unavailable - High API usage'
         }
         
-        return render_template_string("""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Research Progress</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    {% if research.status in ['queued', 'in_progress'] %}
-    <meta http-equiv="refresh" content="5">
-    {% endif %}
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="/">
-                <i class="bi bi-search me-2"></i>AI Research Assistant
-            </a>
-        </div>
-    </nav>
+        return render_template('progress.html',
+            research=research,
+            status_messages=status_messages,
+            primary_provider=primary_provider)
     
-    <div class="container mt-4">
-        <div class="row justify-content-center">
-            <div class="col-lg-8">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-primary text-white">
-                        <h4 class="mb-0">
-                            <i class="bi bi-hourglass-split me-2"></i>{{ research.topic }}
-                        </h4>
-                        <small>Provider: {{ research.provider.title() if research.provider else primary_provider.title() }}</small>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between">
-                                <span class="fw-bold">Progress</span>
-                                <span>{{ research.progress }}%</span>
-                            </div>
-                            <div class="progress">
-                                <div class="progress-bar {% if research.status in ['queued', 'in_progress'] %}progress-bar-striped progress-bar-animated{% endif %} bg-{{ 'success' if research.status == 'completed' else 'danger' if research.status == 'failed' else 'primary' }}" 
-                                     style="width: {{ research.progress }}%"></div>
-                            </div>
-                            <small class="text-muted">Status: {{ status_messages.get(research.status, research.status).title() }}</small>
-                        </div>
-                        
-                        {% if research.status == 'completed' %}
-                        <div class="alert alert-success">
-                            <h5>✅ Research Completed!</h5>
-                            <p><strong>Executive Summary:</strong></p>
-                            <div id="research-content"></div>
-                            <script id="raw-content" type="application/json">{{ research.executive_summary | tojson }}</script>
-                            
-                            {% if research.has_translations %}
-                            <div class="mt-3">
-                                <h6><i class="bi bi-translate me-1"></i>Translation Available</h6>
-                                <p class="text-muted">This research includes translations and multilingual analysis.</p>
-                            </div>
-                            {% endif %}
-                            
-                            <div class="row mt-3">
-                                <div class="col-3">
-                                    <strong>Queries:</strong> {{ research.total_queries }}
-                                </div>
-                                <div class="col-3">
-                                    <strong>Sources:</strong> {{ research.total_sources }}
-                                </div>
-                                <div class="col-3">
-                                    <strong>Provider:</strong> {{ research.provider.title() if research.provider else primary_provider.title() }}
-                                </div>
-                                <div class="col-3">
-                                    <strong>Language:</strong> {{ research.language.upper() }}
-                                </div>
-                            </div>
-                        </div>
-                        {% elif research.status == 'temporarily_unavailable' %}
-                        <div class="alert alert-warning">
-                            <h5>⏳ Service Temporarily Unavailable</h5>
-                            <p>{{ research.error }}</p>
-                        </div>
-                        {% elif research.status == 'failed' %}
-                        <div class="alert alert-danger">
-                            <h5>❌ Research Failed</h5>
-                            <p>{{ research.error }}</p>
-                        </div>
-                        {% else %}
-                        <div class="text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-2">Research in progress... Page will auto-refresh.</p>
-                        </div>
-                        {% endif %}
-                        
-                        <div class="text-center mt-3">
-                            <a href="/" class="btn btn-outline-primary">
-                                <i class="bi bi-house me-1"></i>Back to Home
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script>
-        // Render markdown content if present
-        var rawEl = document.getElementById('raw-content');
-        var contentEl = document.getElementById('research-content');
-        if (rawEl && contentEl) {
-            var raw = JSON.parse(rawEl.textContent);
-            contentEl.innerHTML = marked.parse(raw);
-        }
-    </script>
-</body>
-</html>
-        """, research=research, status_messages=status_messages, 
-        primary_provider=primary_provider)
+    @app.route('/research/<int:research_id>/download')
+    def download_report(research_id):
+        """Download research report as Markdown."""
+        from flask import Response
+        
+        research = db.get_research_by_id(research_id)
+        if not research or research['status'] != 'completed':
+            flash('Report not available.', 'error')
+            return redirect(url_for('home'))
+        
+        content = research.get('report_content') or research.get('executive_summary') or ''
+        topic_slug = research['topic'][:40].strip().replace(' ', '_').lower()
+        filename = f"research_{topic_slug}.md"
+        
+        return Response(
+            content,
+            mimetype='text/markdown',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
     
     @app.route('/api/research/<int:research_id>/status')
     def research_status_api(research_id):

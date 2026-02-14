@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Research History{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-clock-history me-2"></i>Research History
+                </h4>
+                <span class="badge bg-light text-primary">{{ researches | length }} sessions</span>
+            </div>
+            <div class="card-body">
+                {% if researches %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Topic</th>
+                                <th>Language</th>
+                                <th>Status</th>
+                                <th>Sources</th>
+                                <th>Duration</th>
+                                <th>Date</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in researches %}
+                            <tr>
+                                <td><small class="text-muted">{{ r.id }}</small></td>
+                                <td>
+                                    <a href="/research/{{ r.id }}" class="text-decoration-none fw-semibold">
+                                        {{ r.topic[:80] }}{% if r.topic | length > 80 %}...{% endif %}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">{{ (r.research_language or 'en') | upper }}</span>
+                                </td>
+                                <td>
+                                    {% if r.status == 'completed' %}
+                                        <span class="badge bg-success">✅ Done</span>
+                                    {% elif r.status == 'failed' %}
+                                        <span class="badge bg-danger">❌ Failed</span>
+                                    {% elif r.status == 'in_progress' %}
+                                        <span class="badge bg-warning">⏳ Running</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ r.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small>{{ r.total_queries or 0 }}q / {{ r.total_sources or 0 }}s</small>
+                                </td>
+                                <td>
+                                    {% if r.processing_time %}
+                                        <small>{{ "%.0f" | format(r.processing_time) }}s</small>
+                                    {% else %}
+                                        <small class="text-muted">—</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if r.started_at %}
+                                        <small class="text-muted">{{ r.started_at[:16] | replace('T', ' ') }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="/research/{{ r.id }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox display-1 text-muted"></i>
+                    <p class="text-muted mt-3">No research sessions yet.</p>
+                    <a href="/" class="btn btn-primary">
+                        <i class="bi bi-play-circle me-1"></i>Start your first research
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

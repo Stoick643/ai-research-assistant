@@ -2,43 +2,25 @@
 
 ## Phase 1: Exact Match Search Cache ✅ Done
 
-**Goal**: Avoid duplicate Tavily API calls for identical queries. Save money immediately.
-
 - Created `src/tools/search_cache.py` — SQLite cache, hash-based lookup, 24h TTL
 - Wired into `WebSearchTool` — check cache before Tavily, store after
 - Added `cache_hit` flag to `SearchResponse`
+- Note: helps when identical Tavily queries repeat, but LLM generates different
+  search queries each time even for the same topic — see Phase 3 for fix
 
 ---
 
-## Phase 2: Database + UI Overhaul ⬅️ Next
+## Phase 2: Database + UI Overhaul ⬅️ In Progress
 
 **Goal**: Persist research, clean up architecture, improve UI.
 
-### 2a. Move DB files to `data/`
-- `data/research_history.db` — persistent
-- `data/cache/search_cache.db` — ephemeral (24h TTL)
-- `data/cache/translation_cache.db` — ephemeral (increase TTL to 30 days)
-- Update default paths in: `sqlite_writer.py`, `analytics.py`, `database.py`, `search_cache.py`, `translation_cache.py`
-- Update `.gitignore`
-- Delete dead `SQLiteWriter` stub in `report_writer.py`
-
-### 2b. Wire database to `app.py`
-- Replace in-memory `research_storage = {}` with reads/writes via `src/database/`
-- Research survives app restarts
-- Clean separation: `app.py` is a thin UI layer, all business logic goes through agents/database
-
-### 2c. Move HTML to template files
-- Extract inline `render_template_string()` HTML from `app.py` into `templates/`
-- `templates/base.html` — shared layout (navbar, Bootstrap, marked.js)
-- `templates/home.html` — research form
-- `templates/progress.html` — research progress/results
-- `templates/history.html` — new, see 2d
-
+### 2a. Move DB files to `data/` ✅ Done
+### 2b. Wire database to `app.py` ✅ Done
+### 2c. Move HTML to template files ✅ Done
 ### 2d. Research history page (`/history`)
 - List past research sessions (topic, date, status, duration, language)
 - Powered by existing `src/database/analytics.py`
 - Click to view full results of any past research
-- Cache hit stats (e.g. "3/5 queries from cache")
 
 ### 2e. Show sources & citations in results
 - Display sources used (title, URL, relevance score) from `Source` model
@@ -46,12 +28,81 @@
 
 ### 2f. Download report as Markdown
 - "Download as Markdown" button on completed research
-- Generates from `research.report_content` in DB — no more auto-writing to `reports/`
-- Remove auto-write to `reports/` folder (keep folder for manual exports)
+- Generates from `research.report_content` in DB
+- Remove auto-write to `reports/` folder
+
+### Unplanned bonus (done)
+- LLM translation provider (`src/tools/providers/llm_translate.py`)
+- Fixed progress bar animation, markdown rendering
+- Removed hardcoded Tavily API key
 
 ---
 
-## Phase 3: Semantic Search Cache (sqlite-vec)
+## Phase 3: Deployment (Fly.io)
+
+**Goal**: Make the app publicly accessible.
+
+### Setup
+- Create `Dockerfile`
+- Create `fly.toml` configuration
+- Persistent volume for `data/research_history.db`
+- Cache DBs can live on ephemeral storage
+- Environment variables for API keys (Fly.io secrets)
+
+### Production hardening
+- CSRF protection (already have flask-wtf)
+- Rate limiting on endpoints (prevent abuse)
+- Basic auth or API key for access control
+- Health check endpoint (already exists at `/health`)
+
+---
+
+## Phase 4: Topic-Level Cache
+
+**Goal**: Same topic → return previous result instantly. Biggest cost saver.
+
+### The problem
+- User submits same topic twice (e.g. same query in English then Slovenian)
+- LLM generates different search queries each time → query-level cache misses
+- Full pipeline runs again: 5 Tavily calls + multiple LLM calls = wasted time & money
+
+### Solution: cache at the topic level
+- Before starting research, check `research_history.db` for a completed research
+  with the same (or very similar) topic text
+- Exact match: normalize topic (lowercase, strip whitespace) → lookup in DB
+- If found and fresh (within TTL, e.g. 24h): return cached result immediately
+- For translated requests: reuse English research, only run translation step
+- UI: indicate "Served from previous research" with option to "Research again"
+
+### Implementation
+- Add check in `app.py` `submit_research()` before spawning background thread
+- Query `Research` table for matching topic + status=completed
+- If translating to new language: reuse English analysis, run translation only
+- Configurable TTL (default 24h, same as search cache)
+
+---
+
+## Phase 5: Live Progress & Quick Preview
+
+**Goal**: Better user engagement during the ~60s research wait.
+
+### 4a. Live status messages
+- Push real-time agent steps to the UI: "Generating search queries...",
+  "Searching: quantum computing breakthroughs 2025", "Analyzing 15 sources...",
+  "Synthesizing report..."
+- Agent already goes through distinct phases — surface them
+- Use SSE (Server-Sent Events) or polling with status messages
+- Replace fake progress % (20→40→60→100) with real step-based progress
+
+### 4b. Quick preview from Tavily
+- After first search completes (~5s), show Tavily's AI answer as instant preview
+- User gets something useful immediately while full LLM analysis runs
+- Full report replaces preview when ready
+- Preview clearly labeled: "Quick preview — full analysis in progress..."
+
+---
+
+## Phase 6: Semantic Search Cache (sqlite-vec)
 
 **Goal**: Cache hits for semantically similar queries, not just exact matches.
 
@@ -68,25 +119,6 @@
 ### New dependency
 - `sqlite-vec` package
 - Embedding provider (TBD)
-
----
-
-## Phase 4: Deployment (Fly.io)
-
-**Goal**: Make the app publicly accessible.
-
-### Setup
-- Create `Dockerfile`
-- Create `fly.toml` configuration
-- Persistent volume for `data/research_history.db`
-- Cache DBs can live on ephemeral storage
-- Environment variables for API keys (Fly.io secrets)
-
-### Production hardening
-- CSRF protection (already have flask-wtf)
-- Rate limiting on endpoints (prevent abuse)
-- Basic auth or API key for access control
-- Health check endpoint (already exists at `/health`)
 
 ---
 

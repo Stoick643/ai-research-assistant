@@ -156,7 +156,8 @@ class MultiLanguageResearchAgent(ResearchAgent):
         
         research_result = await self.conduct_research(
             research_topic,
-            focus_areas=focus_areas
+            focus_areas=focus_areas,
+            search_depth=search_depth
         )
         
         # Add language metadata

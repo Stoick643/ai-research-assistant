@@ -67,7 +67,7 @@ class ResearchAgent(ReasoningAgent):
             except Exception as e:
                 self.logger.warning("Progress callback failed", error=str(e))
     
-    async def conduct_research(self, topic: str, focus_areas: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def conduct_research(self, topic: str, focus_areas: Optional[List[str]] = None, search_depth: str = "basic") -> Dict[str, Any]:
         """
         Main research pipeline that conducts comprehensive research on a topic.
         
@@ -84,8 +84,9 @@ class ResearchAgent(ReasoningAgent):
             focus_areas = [normalize_text(area) for area in focus_areas]
         
         self.research_start_time = time.time()
+        self.current_search_depth = search_depth
         start_datetime = datetime.utcnow()
-        self.logger.info("Starting research", topic=topic, focus_areas=focus_areas)
+        self.logger.info("Starting research", topic=topic, focus_areas=focus_areas, search_depth=search_depth)
         
         # Reset tracking variables for new research session
         self.research_queries = []
@@ -211,10 +212,11 @@ class ResearchAgent(ReasoningAgent):
             )
             
             try:
+                depth = getattr(self, 'current_search_depth', 'basic')
                 response = await self.web_search_tool.search(
                     query=query,
                     max_results=5,
-                    search_depth="basic",
+                    search_depth=depth,
                     include_answer=True
                 )
                 
@@ -565,7 +567,7 @@ class ResearchAgent(ReasoningAgent):
                 "query_text": query_text,
                 "executed_at": datetime.utcnow(),
                 "max_results": 5,  # Default from search calls
-                "search_depth": "basic",
+                "search_depth": getattr(self, 'current_search_depth', 'basic'),
                 "include_answer": True,
                 "results_count": len(response.results),
                 "ai_answer": response.answer,

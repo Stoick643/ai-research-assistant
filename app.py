@@ -366,7 +366,8 @@ def create_production_app():
                         else:
                             result = await agent.conduct_research(
                                 topic=topic,
-                                focus_areas=focus_areas.split(',') if focus_areas else None
+                                focus_areas=focus_areas.split(',') if focus_areas else None,
+                                search_depth=depth
                             )
                         
                         on_progress('completed', 100, 'Research complete!', '')

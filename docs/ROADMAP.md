@@ -119,7 +119,41 @@
 
 ---
 
-## Phase 6: Semantic Search Cache (sqlite-vec)
+## Phase 6: BYOK (Bring Your Own Key) ⬅️ Next
+
+**Goal**: Let users provide their own API keys so they cover their own LLM/search costs. Zero cost to us, full transparency to them.
+
+### 6a. Settings page
+- New `/settings` route with form for API keys: OpenAI, Anthropic, DeepSeek, Tavily
+- Clean UI with per-provider sections, password-masked inputs
+- "Test Connection" button per key — quick API ping to verify it works
+- "Clear All Keys" button to wipe stored keys
+- Link to settings from navbar
+
+### 6b. Session storage
+- Store keys in Flask encrypted session cookie (never in DB)
+- Keys persist across page loads but not across browsers/devices
+- `SECRET_KEY` already configured — session encryption works out of the box
+
+### 6c. Client creation with user keys
+- Modify `app.py` research pipeline to prefer user keys when present
+- Fall back to server keys when user hasn't provided their own
+- Build provider fallback chain dynamically based on which keys are available
+- Works for both full research and translate-only paths
+
+### 6d. UI indicators
+- Home page shows "Using your OpenAI key" vs "Using server key" per provider
+- Progress page shows which keys powered the research
+- Settings page shows which keys are currently stored (masked)
+
+### 6e. Key validation API
+- `/api/settings/test-key` endpoint — tests a single provider key
+- Returns success/failure + model info (e.g., "gpt-4 access confirmed")
+- Called by "Test Connection" button via JS
+
+---
+
+## Phase 7: Semantic Search Cache (sqlite-vec)
 
 **Goal**: Cache hits for semantically similar queries, not just exact matches.
 

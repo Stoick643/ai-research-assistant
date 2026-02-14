@@ -1,5 +1,7 @@
 # AI Research Assistant
 
+**Live at: [airesearchassistant.fly.dev](https://airesearchassistant.fly.dev/)**
+
 An AI-powered research assistant that conducts web searches, synthesizes findings using LLMs, and generates comprehensive multi-language reports.
 
 ## Features

@@ -76,8 +76,9 @@ reports/*.md
 reports/*.pdf
 reports/*.html
 
-# Translation cache
-translation_cache.db
+# Data & cache databases
+data/
+
 
 # Testing
 .coverage

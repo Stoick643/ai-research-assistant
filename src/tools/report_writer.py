@@ -141,28 +141,6 @@ class MarkdownWriter(ReportWriter):
         return content
 
 
-class SQLiteWriter(ReportWriter):
-    """SQLite database writer implementation (future enhancement)."""
-    
-    def __init__(self, db_path: str = "reports.db"):
-        self.db_path = Path(db_path)
-        self.logger = logger.bind(writer="sqlite")
-        
-    async def save_report(self, content: str, filename: str, metadata: Optional[Dict[str, Any]] = None) -> str:
-        """
-        Save report to SQLite database.
-        
-        Note: This is a placeholder implementation for future enhancement.
-        """
-        # TODO: Implement SQLite storage
-        # - Create tables if not exists
-        # - Insert report with metadata
-        # - Return database record ID or path
-        
-        self.logger.warning("SQLite writer not yet implemented")
-        raise NotImplementedError("SQLite writer will be implemented in future version")
-
-
 class ReportFormatter:
     """Utility class for formatting structured reports."""
     

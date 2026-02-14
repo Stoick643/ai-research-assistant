@@ -291,32 +291,44 @@ class ResearchAgent(ReasoningAgent):
         Provide a thorough, well-structured analysis that synthesizes information across all sources.
         """
         
+        system_prompt = "You are an expert research analyst. Synthesize information from multiple sources into a comprehensive analysis."
+        
         # Use streaming if progress callback is set and client supports it
         if self.progress_callback and hasattr(self.llm_client, 'generate_stream'):
             last_update = [time.time()]
+            start_time = time.time()
             
             def on_chunk(chunk, accumulated):
                 now = time.time()
-                # Update preview every ~1.5s to keep UI flowing
-                if now - last_update[0] >= 1.5:
+                # Update preview every ~1s to keep UI flowing smoothly
+                if now - last_update[0] >= 1.0:
                     last_update[0] = now
+                    elapsed = int(now - start_time)
                     self._report_progress(
                         'analyzing', 65,
-                        f'Analyzing {len(self.all_search_results)} sources...',
+                        f'Analyzing {len(self.all_search_results)} sources... ({elapsed}s)',
                         f'{len(accumulated)} characters generated',
-                        preview=accumulated
+                        preview=f'## 📊 Analysis\n\n{accumulated}'
                     )
             
             analysis = await self.llm_client.generate_stream(
-                system_prompt="You are an expert research analyst. Synthesize information from multiple sources into a comprehensive analysis.",
+                system_prompt=system_prompt,
                 user_message=analysis_prompt,
                 on_chunk=on_chunk,
                 max_tokens=2000,
                 temperature=0.3
             )
+            
+            # Final update with complete analysis
+            self._report_progress(
+                'analyzing', 72,
+                'Analysis complete — preparing report...',
+                f'{len(analysis)} characters',
+                preview=f'## 📊 Analysis\n\n{analysis}'
+            )
         else:
             analysis = await self.llm_client.generate(
-                system_prompt="You are an expert research analyst. Synthesize information from multiple sources into a comprehensive analysis.",
+                system_prompt=system_prompt,
                 user_message=analysis_prompt,
                 max_tokens=2000,
                 temperature=0.3
@@ -334,9 +346,16 @@ class ResearchAgent(ReasoningAgent):
         """Generate structured markdown report."""
         self.logger.info("Generating report", topic=topic)
         
-        # Extract key findings from analysis
-        self._report_progress('writing_report', 78, 'Extracting key findings...', '')
+        # Extract key findings from analysis (streams to preview)
+        self._report_progress('writing_report', 78, 'Extracting key findings...', '', 
+                            preview=f'## 📊 Analysis\n\n{analysis}')
         key_findings = await self._extract_key_findings(analysis)
+        
+        # Show key findings in preview while executive summary generates
+        findings_preview = '\n'.join(f'- {f}' for f in key_findings)
+        self._report_progress('writing_report', 80, 
+                            f'Found {len(key_findings)} key findings — writing summary...', '',
+                            preview=f'## 🔑 Key Findings\n\n{findings_preview}')
         
         # Prepare sources list
         sources = []
@@ -357,12 +376,12 @@ class ResearchAgent(ReasoningAgent):
         # Calculate processing time
         processing_time = time.time() - self.research_start_time if self.research_start_time else 0
         
-        # Generate executive summary from analysis
-        self._report_progress('writing_report', 83, 'Writing executive summary...', f'{len(key_findings)} key findings extracted')
-        executive_summary = await self._extract_executive_summary(analysis)
+        # Generate executive summary from analysis (streams to preview)
+        executive_summary = await self._extract_executive_summary(analysis, stream_to_preview=True)
         
         # Format report using the standard template
-        self._report_progress('writing_report', 88, 'Formatting final report...', f'{len(sources)} sources cited')
+        self._report_progress('writing_report', 88, 'Formatting final report...', f'{len(sources)} sources cited',
+                            preview=f'## ✍️ Executive Summary\n\n{executive_summary}\n\n## 🔑 Key Findings\n\n{findings_preview}')
         report_content = ReportFormatter.format_research_report(
             topic=topic,
             executive_summary=executive_summary,
@@ -414,7 +433,7 @@ class ResearchAgent(ReasoningAgent):
         
         return findings[:5]  # Limit to 5 findings
     
-    async def _extract_executive_summary(self, analysis: str) -> str:
+    async def _extract_executive_summary(self, analysis: str, stream_to_preview: bool = False) -> str:
         """Extract executive summary from the analysis."""
         prompt = f"""
         From the following analysis, create a concise executive summary (2-3 paragraphs) that:
@@ -428,12 +447,37 @@ class ResearchAgent(ReasoningAgent):
         Return only the executive summary without headers or formatting.
         """
         
-        summary = await self.llm_client.generate(
-            system_prompt="You are a research writer. Create executive summaries that distill complex analysis into clear, accessible overviews.",
-            user_message=prompt,
-            max_tokens=400,
-            temperature=0.3
-        )
+        system_prompt = "You are a research writer. Create executive summaries that distill complex analysis into clear, accessible overviews."
+        
+        # Stream if we have a callback and the client supports it
+        if stream_to_preview and self.progress_callback and hasattr(self.llm_client, 'generate_stream'):
+            last_update = [time.time()]
+            
+            def on_chunk(chunk, accumulated):
+                now = time.time()
+                if now - last_update[0] >= 1.0:
+                    last_update[0] = now
+                    self._report_progress(
+                        'writing_report', 85,
+                        'Writing executive summary...',
+                        f'{len(accumulated)} characters',
+                        preview=f'## ✍️ Executive Summary\n\n{accumulated}'
+                    )
+            
+            summary = await self.llm_client.generate_stream(
+                system_prompt=system_prompt,
+                user_message=prompt,
+                on_chunk=on_chunk,
+                max_tokens=400,
+                temperature=0.3
+            )
+        else:
+            summary = await self.llm_client.generate(
+                system_prompt=system_prompt,
+                user_message=prompt,
+                max_tokens=400,
+                temperature=0.3
+            )
         
         return summary.strip()
     

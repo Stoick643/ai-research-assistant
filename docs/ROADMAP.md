@@ -104,11 +104,18 @@
 - Per-query progress messages: "🔍 Searching 2/5: quantum computing..."
 - Preview stays visible during analysis with badge "Full analysis in progress..."
 
-### 5c. Streaming LLM responses ⬅️ Next
-- Add `generate_stream` to LLM clients (OpenAI, DeepSeek, Anthropic)
-- Stream analysis and report writing — text flows into preview in real-time
-- Eliminates the ~35s silent gap after searches complete
-- Full timeline becomes: searches (preview grows) → analysis (streams) → report (streams) → done
+### 5c. Streaming LLM responses ✅
+- Added `generate_stream` to all LLM clients:
+  - `ImprovedLLMClient` base + OpenAI, DeepSeek, Anthropic in `rate_limiting.py` (already existed)
+  - `LLMClient` base + `OpenAIClient`, `AnthropicClient` in `llm.py` (new)
+- `_analyze_sources` streams analysis text into live preview (~2000 tokens, biggest call)
+- `_extract_executive_summary` streams when `stream_to_preview=True` (used during report phase)
+- `_generate_report` shows key findings → streams executive summary → formats final report
+- Preview transitions: search results (🔍) → live analysis (📊) → writing report (📝)
+- Adaptive polling: 1.2s during streaming phases, 2.5s otherwise
+- Smart auto-scroll: stays at bottom unless user scrolls up
+- 4 new tests: streaming analysis, streaming exec summary, non-streaming default, report streaming
+- Full timeline: searches (preview grows) → analysis (streams) → report (streams) → done
 
 ---
 

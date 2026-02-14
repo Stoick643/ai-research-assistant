@@ -184,6 +184,10 @@
     };
 
     var lastLogCount = 0;
+    var lastPreviewLen = 0;
+    var isStreaming = false;
+    var POLL_FAST = 1200;   // Poll faster during streaming phases
+    var POLL_NORMAL = 2500; // Normal polling interval
 
     function updateUI(data) {
         var progress = data.progress || 0;
@@ -194,6 +198,15 @@
         var status = data.status || '';
         var stepsLog = data.steps_log || [];
         var icon = stepIcons[step] || '';
+
+        // Detect streaming phases (analysis, writing_report) and adjust poll rate
+        var nowStreaming = (step === 'analyzing' || step === 'writing_report') && preview.length > lastPreviewLen;
+        if (nowStreaming !== isStreaming) {
+            isStreaming = nowStreaming;
+            clearInterval(pollInterval);
+            pollInterval = setInterval(poll, isStreaming ? POLL_FAST : POLL_NORMAL);
+        }
+        lastPreviewLen = preview.length;
 
         // Update progress bar
         document.getElementById('progress-pct').textContent = progress + '%';
@@ -235,8 +248,11 @@
             previewCard.style.display = '';
             previewContent.innerHTML = marked.parse(preview);
             
-            // Auto-scroll to bottom as content grows
-            previewBody.scrollTop = previewBody.scrollHeight;
+            // Auto-scroll to bottom as content grows (only if user hasn't scrolled up)
+            var isNearBottom = previewBody.scrollHeight - previewBody.scrollTop - previewBody.clientHeight < 80;
+            if (isNearBottom) {
+                previewBody.scrollTop = previewBody.scrollHeight;
+            }
             
             if (step === 'analyzing') {
                 previewTitle.textContent = 'Live Analysis';
@@ -247,7 +263,7 @@
             } else if (step === 'writing_report') {
                 previewTitle.textContent = 'Writing Report';
                 previewIcon.className = 'bi bi-pencil me-1';
-                previewBadge.textContent = 'Almost done...';
+                previewBadge.textContent = 'Streaming...';
                 previewBadge.className = 'badge bg-success ms-2';
                 previewCard.className = 'card border-success mb-3';
             } else {
@@ -289,7 +305,7 @@
 
     // Start polling if not already complete
     if (!isComplete) {
-        pollInterval = setInterval(poll, 2000);
+        pollInterval = setInterval(poll, POLL_NORMAL);
         // Initial poll immediately
         poll();
     }

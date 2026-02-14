@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, AsyncGenerator, Callable
 import openai
 import anthropic
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -36,6 +36,27 @@ class LLMClient(ABC):
         **kwargs
     ) -> str:
         pass
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        user_message: str,
+        on_chunk: Optional[Callable[[str, str], None]] = None,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> str:
+        """
+        Generate with streaming support. Calls on_chunk(new_text, accumulated_text)
+        as tokens arrive. Returns the complete text.
+        
+        Default implementation falls back to non-streaming generate().
+        Subclasses can override for true streaming.
+        """
+        result = await self.generate(system_prompt, user_message, max_tokens, temperature, **kwargs)
+        if on_chunk:
+            on_chunk(result, result)
+        return result
 
 
 class OpenAIClient(LLMClient):
@@ -88,6 +109,50 @@ class OpenAIClient(LLMClient):
             logger.error("OpenAI API call failed", error=str(e))
             raise
 
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        user_message: str,
+        on_chunk: Optional[Callable[[str, str], None]] = None,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> str:
+        try:
+            normalized_system = normalize_text(system_prompt)
+            normalized_user = normalize_text(user_message)
+            
+            messages = [
+                {"role": "system", "content": normalized_system},
+                {"role": "user", "content": normalized_user}
+            ]
+            
+            stream = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+            
+            accumulated = []
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    accumulated.append(delta)
+                    if on_chunk:
+                        try:
+                            on_chunk(delta, ''.join(accumulated))
+                        except Exception:
+                            pass
+            
+            result = ''.join(accumulated)
+            return normalize_text(result) if result else ""
+            
+        except Exception as e:
+            logger.error("OpenAI streaming call failed", error=str(e))
+            raise
+
 
 class AnthropicClient(LLMClient):
     def __init__(
@@ -131,6 +196,42 @@ class AnthropicClient(LLMClient):
             
         except Exception as e:
             logger.error("Anthropic API call failed", error=str(e))
+            raise
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        user_message: str,
+        on_chunk: Optional[Callable[[str, str], None]] = None,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> str:
+        try:
+            normalized_system = normalize_text(system_prompt)
+            normalized_user = normalize_text(user_message)
+            
+            accumulated = []
+            async with self.client.messages.stream(
+                model=self.model,
+                max_tokens=max_tokens or 4096,
+                temperature=temperature,
+                system=normalized_system,
+                messages=[{"role": "user", "content": normalized_user}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    accumulated.append(text)
+                    if on_chunk:
+                        try:
+                            on_chunk(text, ''.join(accumulated))
+                        except Exception:
+                            pass
+            
+            result = ''.join(accumulated)
+            return normalize_text(result) if result else ""
+            
+        except Exception as e:
+            logger.error("Anthropic streaming call failed", error=str(e))
             raise
 
 

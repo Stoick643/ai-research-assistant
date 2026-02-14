@@ -368,3 +368,175 @@ class TestResearchAgent:
             
             mock_parent_execute.assert_called_once_with("solve equation")
             assert result == {"task": "math", "status": "completed"}
+
+
+class StreamingMockLLMClient(LLMClient):
+    """Mock LLM client that supports streaming via generate_stream."""
+    
+    def __init__(self, responses=None):
+        self.responses = responses or []
+        self.call_count = 0
+        self.stream_call_count = 0
+    
+    async def generate(self, system_prompt, user_message, **kwargs):
+        if self.call_count < len(self.responses):
+            response = self.responses[self.call_count]
+        else:
+            response = f"Mock response {self.call_count}"
+        self.call_count += 1
+        return response
+
+    async def generate_stream(self, system_prompt, user_message, on_chunk=None, **kwargs):
+        """Simulate streaming by yielding chunks of the response."""
+        if self.stream_call_count < len(self.responses):
+            full_text = self.responses[self.stream_call_count]
+        else:
+            full_text = f"Streamed response {self.stream_call_count}"
+        self.stream_call_count += 1
+        
+        # Simulate streaming: split into word-sized chunks
+        words = full_text.split(' ')
+        accumulated = []
+        for word in words:
+            chunk = word + ' '
+            accumulated.append(chunk)
+            if on_chunk:
+                on_chunk(chunk, ''.join(accumulated))
+        
+        return full_text
+
+
+class TestStreamingResearchAgent:
+    """Tests for streaming LLM responses in the research agent."""
+
+    @pytest.fixture
+    def streaming_llm_client(self):
+        return StreamingMockLLMClient([
+            "Comprehensive analysis of AI trends with multiple key developments across industries.",
+            "Generative AI is mainstream\nAI safety is a priority\nEdge AI is emerging",
+            "AI is transforming industries in 2025 with generative AI leading the way.",
+        ])
+
+    @pytest.fixture
+    def research_agent(self, streaming_llm_client, tmp_path):
+        mock_search = Mock(spec=WebSearchTool)
+        mock_search.search = AsyncMock(return_value=SearchResponse(
+            "test query",
+            [SearchResult("Title", "https://example.com", "Content", 0.9)],
+            answer="Quick answer"
+        ))
+        
+        agent = ResearchAgent(
+            name="StreamTest",
+            llm_client=streaming_llm_client,
+            web_search_tool=mock_search,
+            report_writer=MarkdownWriter(output_dir=str(tmp_path)),
+            enable_database_tracking=False,
+            max_search_queries=2
+        )
+        return agent
+
+    @pytest.mark.asyncio
+    async def test_analyze_sources_uses_streaming(self, research_agent, streaming_llm_client):
+        """Test that _analyze_sources uses generate_stream when callback is set."""
+        progress_updates = []
+        
+        def on_progress(step, progress, message, detail='', preview=''):
+            progress_updates.append({
+                'step': step, 'progress': progress,
+                'message': message, 'preview': preview
+            })
+        
+        research_agent.progress_callback = on_progress
+        research_agent.all_search_results = [
+            SearchResult("Title", "https://example.com", "Content", 0.9)
+        ]
+        
+        search_responses = [SearchResponse(
+            "AI trends", 
+            [SearchResult("Title", "https://example.com", "Content", 0.9)],
+            answer="AI is growing"
+        )]
+        
+        analysis = await research_agent._analyze_sources("AI trends", search_responses)
+        
+        # Should have used generate_stream (not generate)
+        assert streaming_llm_client.stream_call_count == 1
+        assert "analysis" in analysis.lower() or len(analysis) > 0
+        
+        # Should have sent preview updates with streaming content
+        analyzing_updates = [u for u in progress_updates if u['step'] == 'analyzing']
+        assert len(analyzing_updates) > 0
+        # At least the final update should have preview content
+        assert any(u['preview'] for u in analyzing_updates)
+
+    @pytest.mark.asyncio
+    async def test_executive_summary_streams_when_enabled(self, research_agent, streaming_llm_client):
+        """Test that _extract_executive_summary streams when stream_to_preview=True."""
+        progress_updates = []
+        
+        def on_progress(step, progress, message, detail='', preview=''):
+            progress_updates.append({
+                'step': step, 'message': message, 'preview': preview
+            })
+        
+        research_agent.progress_callback = on_progress
+        
+        streaming_llm_client.responses = [
+            "AI is transforming industries in 2025 with generative AI leading the way."
+        ]
+        
+        summary = await research_agent._extract_executive_summary(
+            "Some analysis text...", 
+            stream_to_preview=True
+        )
+        
+        assert streaming_llm_client.stream_call_count == 1
+        assert len(summary) > 0
+
+    @pytest.mark.asyncio
+    async def test_executive_summary_no_stream_by_default(self, research_agent, streaming_llm_client):
+        """Test that _extract_executive_summary does NOT stream by default."""
+        streaming_llm_client.responses = ["Summary text"]
+        
+        summary = await research_agent._extract_executive_summary("Some analysis...")
+        
+        # Should use generate (not generate_stream)
+        assert streaming_llm_client.stream_call_count == 0
+        assert streaming_llm_client.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_generate_report_streams_executive_summary(self, research_agent, streaming_llm_client):
+        """Test that _generate_report streams the executive summary via preview."""
+        progress_updates = []
+        
+        def on_progress(step, progress, message, detail='', preview=''):
+            progress_updates.append({
+                'step': step, 'progress': progress,
+                'message': message, 'preview': preview
+            })
+        
+        research_agent.progress_callback = on_progress
+        research_agent.research_start_time = __import__('time').time()
+        research_agent.research_queries = ["q1"]
+        
+        streaming_llm_client.responses = [
+            "Finding 1\nFinding 2\nFinding 3",   # key findings (non-streaming)
+            "Executive summary of the research.",  # exec summary (streaming)
+        ]
+        
+        search_responses = [SearchResponse(
+            "test", [SearchResult("T", "https://e.com", "C", 0.9)]
+        )]
+        
+        report = await research_agent._generate_report("AI trends", "Full analysis...", search_responses)
+        
+        # Report should contain the executive summary and findings
+        assert "Executive summary" in report or "Finding" in report
+        
+        # Should have streamed the executive summary (1 stream call)
+        assert streaming_llm_client.stream_call_count == 1
+        
+        # Should have progress updates for writing_report step
+        writing_updates = [u for u in progress_updates if u['step'] == 'writing_report']
+        assert len(writing_updates) >= 2  # At least key findings + formatting updates

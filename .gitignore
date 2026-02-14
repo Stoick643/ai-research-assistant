@@ -82,6 +82,8 @@ data/
 
 # Testing
 .coverage
+coverage.xml
+htmlcov/
 htmlcov/
 .tox/
 .pytest_cache/

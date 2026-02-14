@@ -119,37 +119,38 @@
 
 ---
 
-## Phase 6: BYOK (Bring Your Own Key) ⬅️ Next
+## Phase 6: BYOK (Bring Your Own Key) ✅ Done
 
 **Goal**: Let users provide their own API keys so they cover their own LLM/search costs. Zero cost to us, full transparency to them.
 
-### 6a. Settings page
-- New `/settings` route with form for API keys: OpenAI, Anthropic, DeepSeek, Tavily
-- Clean UI with per-provider sections, password-masked inputs
-- "Test Connection" button per key — quick API ping to verify it works
-- "Clear All Keys" button to wipe stored keys
-- Link to settings from navbar
+### 6a. Settings page ✅
+- `/settings` route with per-provider API key inputs (Tavily, OpenAI, DeepSeek, Anthropic)
+- Password-masked inputs with toggle visibility button
+- "Test Connection" button per key — minimal API call to verify
+- "Clear All Keys" button, "Save Keys" button
+- Link in navbar ("API Keys")
 
-### 6b. Session storage
-- Store keys in Flask encrypted session cookie (never in DB)
-- Keys persist across page loads but not across browsers/devices
-- `SECRET_KEY` already configured — session encryption works out of the box
+### 6b. Session storage ✅
+- Keys stored in Flask encrypted session cookie (never in DB)
+- Persist across page loads within same browser session
+- `SECRET_KEY` handles encryption
 
-### 6c. Client creation with user keys
-- Modify `app.py` research pipeline to prefer user keys when present
-- Fall back to server keys when user hasn't provided their own
-- Build provider fallback chain dynamically based on which keys are available
-- Works for both full research and translate-only paths
+### 6c. Client creation with user keys ✅
+- `_resolve_keys()` — user keys override server keys
+- `_resolve_providers()` — dynamic fallback chain based on effective keys
+- Both full research and translate-only paths use resolved keys
+- Validates LLM + Tavily availability before starting research (redirects to settings if missing)
 
-### 6d. UI indicators
-- Home page shows "Using your OpenAI key" vs "Using server key" per provider
-- Progress page shows which keys powered the research
-- Settings page shows which keys are currently stored (masked)
+### 6d. UI indicators ✅
+- Home page System Status shows "🔑 Your key" vs "🖥️ Server key" per provider
+- Settings page shows current key status per provider
+- Research metadata records which provider + whether user keys were used
 
-### 6e. Key validation API
-- `/api/settings/test-key` endpoint — tests a single provider key
-- Returns success/failure + model info (e.g., "gpt-4 access confirmed")
-- Called by "Test Connection" button via JS
+### 6e. Key validation API ✅
+- `/api/settings/test-key` POST endpoint
+- Tests: Tavily search, OpenAI/DeepSeek models.list, Anthropic count_tokens
+- Returns success/failure + details
+- 9 new tests (115 total passing)
 
 ---
 

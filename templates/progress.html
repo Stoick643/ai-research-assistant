@@ -34,15 +34,16 @@
                     </small>
                 </div>
 
-                <!-- Quick preview (grows with each search result) -->
+                <!-- Live preview (grows during search, streams during analysis) -->
                 <div id="preview-card" class="card border-info mb-3" style="display: none;">
                     <div class="card-header bg-info bg-opacity-10">
                         <h6 class="mb-0">
-                            <i class="bi bi-lightning-charge me-1"></i>Quick Preview from Web Search
+                            <i id="preview-icon" class="bi bi-lightning-charge me-1"></i>
+                            <span id="preview-title">Quick Preview from Web Search</span>
                             <span id="preview-badge" class="badge bg-info ms-2">Searching...</span>
                         </h6>
                     </div>
-                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    <div id="preview-body" class="card-body" style="max-height: 500px; overflow-y: auto;">
                         <div id="preview-content"></div>
                     </div>
                 </div>
@@ -222,22 +223,39 @@
             lastLogCount = stepsLog.length;
         }
 
-        // Show preview — grows during search, stays visible during analysis
+        // Show preview — grows during search, streams during analysis/writing
         var previewCard = document.getElementById('preview-card');
         var previewContent = document.getElementById('preview-content');
         var previewBadge = document.getElementById('preview-badge');
-        var searchSteps = ['queued', 'initializing', 'generating_queries', 'searching'];
+        var previewTitle = document.getElementById('preview-title');
+        var previewIcon = document.getElementById('preview-icon');
+        var previewBody = document.getElementById('preview-body');
         
         if (preview && status !== 'completed' && status !== 'failed') {
             previewCard.style.display = '';
             previewContent.innerHTML = marked.parse(preview);
             
-            if (searchSteps.indexOf(step) !== -1) {
+            // Auto-scroll to bottom as content grows
+            previewBody.scrollTop = previewBody.scrollHeight;
+            
+            if (step === 'analyzing') {
+                previewTitle.textContent = 'Live Analysis';
+                previewIcon.className = 'bi bi-cpu me-1';
+                previewBadge.textContent = 'Streaming...';
+                previewBadge.className = 'badge bg-warning ms-2';
+                previewCard.className = 'card border-warning mb-3';
+            } else if (step === 'writing_report') {
+                previewTitle.textContent = 'Writing Report';
+                previewIcon.className = 'bi bi-pencil me-1';
+                previewBadge.textContent = 'Almost done...';
+                previewBadge.className = 'badge bg-success ms-2';
+                previewCard.className = 'card border-success mb-3';
+            } else {
+                previewTitle.textContent = 'Quick Preview from Web Search';
+                previewIcon.className = 'bi bi-lightning-charge me-1';
                 previewBadge.textContent = 'Searching...';
                 previewBadge.className = 'badge bg-info ms-2';
-            } else {
-                previewBadge.textContent = 'Full analysis in progress...';
-                previewBadge.className = 'badge bg-warning ms-2';
+                previewCard.className = 'card border-info mb-3';
             }
         }
 

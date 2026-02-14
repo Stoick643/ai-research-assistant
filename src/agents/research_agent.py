@@ -291,12 +291,36 @@ class ResearchAgent(ReasoningAgent):
         Provide a thorough, well-structured analysis that synthesizes information across all sources.
         """
         
-        analysis = await self.llm_client.generate(
-            system_prompt="You are an expert research analyst. Synthesize information from multiple sources into a comprehensive analysis.",
-            user_message=analysis_prompt,
-            max_tokens=2000,
-            temperature=0.3
-        )
+        # Use streaming if progress callback is set and client supports it
+        if self.progress_callback and hasattr(self.llm_client, 'generate_stream'):
+            last_update = [time.time()]
+            
+            def on_chunk(chunk, accumulated):
+                now = time.time()
+                # Update preview every ~1.5s to keep UI flowing
+                if now - last_update[0] >= 1.5:
+                    last_update[0] = now
+                    self._report_progress(
+                        'analyzing', 65,
+                        f'Analyzing {len(self.all_search_results)} sources...',
+                        f'{len(accumulated)} characters generated',
+                        preview=accumulated
+                    )
+            
+            analysis = await self.llm_client.generate_stream(
+                system_prompt="You are an expert research analyst. Synthesize information from multiple sources into a comprehensive analysis.",
+                user_message=analysis_prompt,
+                on_chunk=on_chunk,
+                max_tokens=2000,
+                temperature=0.3
+            )
+        else:
+            analysis = await self.llm_client.generate(
+                system_prompt="You are an expert research analyst. Synthesize information from multiple sources into a comprehensive analysis.",
+                user_message=analysis_prompt,
+                max_tokens=2000,
+                temperature=0.3
+            )
         
         self.logger.info("Source analysis completed", topic=topic, analysis_length=len(analysis))
         return analysis
@@ -311,6 +335,7 @@ class ResearchAgent(ReasoningAgent):
         self.logger.info("Generating report", topic=topic)
         
         # Extract key findings from analysis
+        self._report_progress('writing_report', 78, 'Extracting key findings...', '')
         key_findings = await self._extract_key_findings(analysis)
         
         # Prepare sources list
@@ -333,9 +358,11 @@ class ResearchAgent(ReasoningAgent):
         processing_time = time.time() - self.research_start_time if self.research_start_time else 0
         
         # Generate executive summary from analysis
+        self._report_progress('writing_report', 83, 'Writing executive summary...', f'{len(key_findings)} key findings extracted')
         executive_summary = await self._extract_executive_summary(analysis)
         
         # Format report using the standard template
+        self._report_progress('writing_report', 88, 'Formatting final report...', f'{len(sources)} sources cited')
         report_content = ReportFormatter.format_research_report(
             topic=topic,
             executive_summary=executive_summary,

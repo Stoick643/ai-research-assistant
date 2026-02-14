@@ -6,7 +6,7 @@ Improved Rate Limiting and Error Handling for AI Research Assistant
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, AsyncGenerator, Callable
 import openai
 import anthropic
 from openai import AsyncOpenAI  # For DeepSeek compatibility
@@ -167,6 +167,70 @@ class ImprovedLLMClient(ABC):
         We apologize for the inconvenience and are working to increase our capacity.
         """
 
+    @abstractmethod
+    async def _stream_internal(
+        self,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        **kwargs
+    ) -> AsyncGenerator[str, None]:
+        """Internal streaming method to be implemented by subclasses."""
+        pass
+        yield  # Make it a generator
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        user_message: str,
+        on_chunk: Optional[Callable[[str, str], None]] = None,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+        use_fallback: bool = True,
+        **kwargs
+    ) -> str:
+        """
+        Generate text with streaming, calling on_chunk(new_text, full_text_so_far) 
+        as tokens arrive. Returns the complete text.
+        
+        Args:
+            on_chunk: callback(chunk, accumulated_text) called as tokens arrive
+        """
+        try:
+            await self.rate_limiter.wait_if_needed()
+            
+            accumulated = []
+            async for chunk in self._stream_internal(
+                system_prompt, user_message, max_tokens, temperature, **kwargs
+            ):
+                accumulated.append(chunk)
+                if on_chunk:
+                    try:
+                        on_chunk(chunk, ''.join(accumulated))
+                    except Exception:
+                        pass  # Don't let callback errors kill the stream
+            
+            return ''.join(accumulated)
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            is_quota_error = any(term in error_msg for term in [
+                'quota', 'rate limit', '429', 'insufficient_quota',
+                'insufficient balance', '402', 'billing', 'limit exceeded',
+                'authentication_error', 'invalid x-api-key', '401'
+            ])
+            
+            if is_quota_error and use_fallback and self.fallback_client:
+                logger.warning(f"Primary stream failed, trying fallback: {e}")
+                return await self.fallback_client.generate_stream(
+                    system_prompt, user_message, on_chunk,
+                    max_tokens, temperature, use_fallback=True, **kwargs
+                )
+            
+            logger.error(f"LLM stream failed: {e}")
+            raise
+
 
 class ImprovedOpenAIClient(ImprovedLLMClient):
     """Enhanced OpenAI client with improved error handling."""
@@ -215,6 +279,24 @@ class ImprovedOpenAIClient(ImprovedLLMClient):
         except Exception as e:
             logger.error(f"OpenAI unexpected error: {e}")
             raise
+
+    async def _stream_internal(
+        self, system_prompt, user_message, max_tokens=None, temperature=0.7, **kwargs
+    ) -> AsyncGenerator[str, None]:
+        stream = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
 
 
 class ImprovedDeepSeekClient(ImprovedLLMClient):
@@ -269,6 +351,24 @@ class ImprovedDeepSeekClient(ImprovedLLMClient):
             logger.error(f"DeepSeek unexpected error: {e}")
             raise
 
+    async def _stream_internal(
+        self, system_prompt, user_message, max_tokens=None, temperature=0.7, **kwargs
+    ) -> AsyncGenerator[str, None]:
+        stream = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+
 
 class ImprovedAnthropicClient(ImprovedLLMClient):
     """Enhanced Anthropic client with improved error handling."""
@@ -315,6 +415,19 @@ class ImprovedAnthropicClient(ImprovedLLMClient):
         except Exception as e:
             logger.error(f"Anthropic unexpected error: {e}")
             raise
+
+    async def _stream_internal(
+        self, system_prompt, user_message, max_tokens=None, temperature=0.7, **kwargs
+    ) -> AsyncGenerator[str, None]:
+        async with self.client.messages.stream(
+            model=self.model,
+            max_tokens=max_tokens or 4096,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
 
 
 class ResearchRequestQueue:

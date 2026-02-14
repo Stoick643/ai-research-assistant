@@ -59,10 +59,13 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Search Depth</label>
-                            <select class="form-select" name="depth" required>
+                            <select class="form-select" name="depth" id="depth-select" required>
                                 <option value="basic">Basic (Faster & Cheaper)</option>
                                 <option value="advanced">Advanced (More Thorough)</option>
                             </select>
+                            <small id="depth-warning" class="text-warning" style="display: none;">
+                                <i class="bi bi-exclamation-triangle me-1"></i>Advanced uses 2× search credits and takes longer
+                            </small>
                         </div>
                     </div>
                     
@@ -153,6 +156,15 @@
                 }, false);
             });
         }, false);
+
+        // Show warning when advanced depth is selected
+        var depthSelect = document.getElementById('depth-select');
+        var depthWarning = document.getElementById('depth-warning');
+        if (depthSelect && depthWarning) {
+            depthSelect.addEventListener('change', function() {
+                depthWarning.style.display = this.value === 'advanced' ? '' : 'none';
+            });
+        }
     })();
 </script>
 {% endblock %}

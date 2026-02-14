@@ -363,6 +363,113 @@ class TestSQLiteWriter:
         assert "total_queries" in stats
         assert "total_sources" in stats
 
+    def test_find_cached_research_miss(self, sqlite_writer):
+        """Test topic cache miss on empty DB."""
+        result = sqlite_writer.find_cached_research("quantum computing", "en")
+        assert result is None
+
+    def test_find_cached_research_exact_match(self, sqlite_writer):
+        """Test topic cache exact match."""
+        with sqlite_writer.db_manager.get_session() as session:
+            research = Research(
+                topic="Quantum Computing",
+                agent_name="TestAgent",
+                status="completed",
+                research_language="en",
+                report_content="# Quantum Computing Report",
+                completed_at=datetime.utcnow(),
+            )
+            session.add(research)
+
+        result = sqlite_writer.find_cached_research("quantum computing", "en")
+        assert result is not None
+        assert result['match_type'] == 'exact'
+        assert result['research']['topic'] == "Quantum Computing"
+
+    def test_find_cached_research_case_insensitive(self, sqlite_writer):
+        """Test topic cache is case-insensitive."""
+        with sqlite_writer.db_manager.get_session() as session:
+            research = Research(
+                topic="AI Safety Research",
+                agent_name="TestAgent",
+                status="completed",
+                research_language="en",
+                report_content="# AI Safety",
+                completed_at=datetime.utcnow(),
+            )
+            session.add(research)
+
+        result = sqlite_writer.find_cached_research("  ai safety research  ", "en")
+        assert result is not None
+        assert result['match_type'] == 'exact'
+
+    def test_find_cached_research_english_fallback(self, sqlite_writer):
+        """Test that non-English request finds English version."""
+        with sqlite_writer.db_manager.get_session() as session:
+            research = Research(
+                topic="Machine Learning",
+                agent_name="TestAgent",
+                status="completed",
+                research_language="en",
+                report_content="# ML Report",
+                completed_at=datetime.utcnow(),
+            )
+            session.add(research)
+
+        # Ask for German — should find English version
+        result = sqlite_writer.find_cached_research("Machine Learning", "de")
+        assert result is not None
+        assert result['match_type'] == 'english_available'
+
+    def test_find_cached_research_expired(self, sqlite_writer):
+        """Test that expired results are not returned."""
+        with sqlite_writer.db_manager.get_session() as session:
+            research = Research(
+                topic="Old Topic",
+                agent_name="TestAgent",
+                status="completed",
+                research_language="en",
+                report_content="# Old Report",
+                completed_at=datetime.utcnow() - timedelta(hours=25),
+            )
+            session.add(research)
+
+        result = sqlite_writer.find_cached_research("Old Topic", "en", ttl_hours=24)
+        assert result is None
+
+    def test_find_cached_research_incomplete_ignored(self, sqlite_writer):
+        """Test that in-progress/failed research is not returned."""
+        with sqlite_writer.db_manager.get_session() as session:
+            for status in ['in_progress', 'failed', 'queued']:
+                research = Research(
+                    topic="Test Topic",
+                    agent_name="TestAgent",
+                    status=status,
+                    research_language="en",
+                    report_content="# Report",
+                    completed_at=datetime.utcnow(),
+                )
+                session.add(research)
+
+        result = sqlite_writer.find_cached_research("Test Topic", "en")
+        assert result is None
+
+    def test_find_cached_research_empty_report_ignored(self, sqlite_writer):
+        """Test that results with empty report_content are not returned."""
+        with sqlite_writer.db_manager.get_session() as session:
+            research = Research(
+                topic="Empty Report",
+                agent_name="TestAgent",
+                status="completed",
+                research_language="en",
+                report_content="",
+                completed_at=datetime.utcnow(),
+            )
+            session.add(research)
+
+        result = sqlite_writer.find_cached_research("Empty Report", "en")
+        assert result is None
+
 
 class TestResearchAnalytics:
     """Test ResearchAnalytics functionality."""

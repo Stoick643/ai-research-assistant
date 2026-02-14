@@ -116,6 +116,15 @@
                     <a href="/research/{{ research.id }}/download" class="btn btn-outline-success">
                         <i class="bi bi-download me-1"></i>Download Markdown
                     </a>
+                    <form method="POST" action="/submit_research" class="d-inline">
+                        <input type="hidden" name="topic" value="{{ research.topic }}">
+                        <input type="hidden" name="language" value="{{ research.language }}">
+                        <input type="hidden" name="depth" value="{{ research.depth or 'basic' }}">
+                        <input type="hidden" name="force_fresh" value="1">
+                        <button type="submit" class="btn btn-outline-warning">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Research Again
+                        </button>
+                    </form>
                     {% endif %}
                 </div>
             </div>

@@ -10,7 +10,7 @@
 
 ---
 
-## Phase 2: Database + UI Overhaul ⬅️ In Progress
+## Phase 2: Database + UI Overhaul ✅ Done
 
 **Goal**: Persist research, clean up architecture, improve UI.
 
@@ -44,18 +44,19 @@
 
 ---
 
-## Phase 3: Deployment (Fly.io)
+## Phase 3: Deployment (Fly.io) ⬅️ In Progress
 
 **Goal**: Make the app publicly accessible.
 
-### Setup
-- Create `Dockerfile`
-- Create `fly.toml` configuration
-- Persistent volume for `data/research_history.db`
-- Cache DBs can live on ephemeral storage
-- Environment variables for API keys (Fly.io secrets)
+### Setup ✅ Done
+- Dockerfile (Python 3.13, gunicorn)
+- `fly.toml` configuration (ams region, persistent volume)
+- GitHub Actions auto-deploy on push (`.github/workflows/fly.yml`)
+- Persistent volume `ai_researcher` mounted at `/data`
+- Environment variables configured as Fly.io secrets
 
-### Production hardening
+### Remaining: Production hardening
+- Fix DB init crash on deploy (table already exists — fix pushed, needs verification)
 - CSRF protection (already have flask-wtf)
 - Rate limiting on endpoints (prevent abuse)
 - Basic auth or API key for access control
@@ -63,28 +64,23 @@
 
 ---
 
-## Phase 4: Topic-Level Cache
+## Phase 4: Topic-Level Cache ✅ Done
 
 **Goal**: Same topic → return previous result instantly. Biggest cost saver.
 
-### The problem
-- User submits same topic twice (e.g. same query in English then Slovenian)
-- LLM generates different search queries each time → query-level cache misses
-- Full pipeline runs again: 5 Tavily calls + multiple LLM calls = wasted time & money
+### What it does
+- Before running research, checks DB for completed research with same topic (normalized: lowercase, trimmed, collapsed whitespace)
+- **Same topic + same language**: redirects instantly to cached result (zero API calls)
+- **Same topic + different language**: finds English version, runs translation only (1 LLM call instead of full pipeline)
+- **New topic**: full pipeline as before
+- 24h TTL — cached results older than 24h are ignored
+- "Research Again" button on results page to force fresh research (bypasses cache)
 
-### Solution: cache at the topic level
-- Before starting research, check `research_history.db` for a completed research
-  with the same (or very similar) topic text
-- Exact match: normalize topic (lowercase, strip whitespace) → lookup in DB
-- If found and fresh (within TTL, e.g. 24h): return cached result immediately
-- For translated requests: reuse English research, only run translation step
-- UI: indicate "Served from previous research" with option to "Research again"
-
-### Implementation
-- Add check in `app.py` `submit_research()` before spawning background thread
-- Query `Research` table for matching topic + status=completed
-- If translating to new language: reuse English analysis, run translation only
-- Configurable TTL (default 24h, same as search cache)
+### Files changed
+- `src/database/sqlite_writer.py` — added `find_cached_research(topic, language, ttl_hours)` method
+- `app.py` — cache check in `submit_research()`, translate-only background path, `force_fresh` param
+- `templates/progress.html` — "Research Again" button
+- `tests/test_database.py` — 7 new tests for cache lookup (exact, case-insensitive, English fallback, expired, incomplete, empty report)
 
 ---
 

@@ -9,7 +9,7 @@ import sys
 import asyncio
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -47,6 +47,17 @@ def check_requirements():
     print("✅ Required API keys are set!")
     print(f"📋 Available LLM providers: {', '.join(available_llm).upper()}")
     return True, available_llm
+
+def _cache_age_minutes(completed_at_iso: str) -> int:
+    """Return how many minutes ago a cached result was completed."""
+    try:
+        if not completed_at_iso:
+            return 0
+        completed = datetime.fromisoformat(completed_at_iso)
+        return max(1, int((datetime.utcnow() - completed).total_seconds() / 60))
+    except (ValueError, TypeError):
+        return 0
+
 
 def create_production_app():
     """Create production-optimized Flask app."""
@@ -152,6 +163,25 @@ def create_production_app():
             flash('Please enter a research topic with at least 10 characters.', 'error')
             return redirect(url_for('home'))
         
+        force_fresh = request.form.get('force_fresh', '') == '1'
+        
+        # --- Topic-level cache check ---
+        if not force_fresh:
+            cached = db.find_cached_research(topic, language, ttl_hours=24)
+            
+            if cached and cached['match_type'] == 'exact':
+                # Same topic + same language → return instantly
+                cached_id = cached['research']['id']
+                age_mins = _cache_age_minutes(cached['research'].get('completed_at'))
+                flash(f'📋 Showing cached result from {age_mins} minutes ago. Use "Research again" for fresh results.', 'info')
+                return redirect(url_for('research_progress', research_id=cached_id))
+            
+            if cached and cached['match_type'] == 'english_available':
+                # English version exists → translate only (handled below with flag)
+                english_research = cached['research']
+        else:
+            cached = None
+        
         # Create research record in database
         from src.database.models import Research
         with db.db_manager.get_session() as session:
@@ -170,7 +200,84 @@ def create_production_app():
         # Track progress in memory (transient)
         progress_tracker[research_id] = {'progress': 0}
         
-        # Start background research
+        # --- Translate-only path: English result exists, just translate ---
+        translate_only = (cached and cached.get('match_type') == 'english_available')
+        
+        if translate_only:
+            def run_translation_only():
+                try:
+                    async def translate_cached():
+                        db.update_research_status(research_id, 'in_progress')
+                        progress_tracker[research_id]['progress'] = 30
+                        
+                        from src.tools.translation import TranslationTool
+                        
+                        llm_client = create_improved_llm_client(
+                            primary_provider=primary_provider,
+                            fallback_provider=fallback_provider,
+                            final_fallback_provider=final_fallback,
+                            deepseek_api_key=os.environ.get('DEEPSEEK_API_KEY'),
+                            openai_api_key=os.environ.get('OPENAI_API_KEY'),
+                            anthropic_api_key=os.environ.get('ANTHROPIC_API_KEY'),
+                            deepseek_model="deepseek-chat",
+                            openai_model="gpt-4"
+                        )
+                        
+                        translator = TranslationTool(llm_client=llm_client)
+                        progress_tracker[research_id]['progress'] = 50
+                        
+                        # Translate the English report content
+                        en_report = english_research.get('report_content', '')
+                        report_result = await translator.translate(en_report, language, source_language='en')
+                        translated_report = report_result.translated_text
+                        
+                        progress_tracker[research_id]['progress'] = 80
+                        
+                        # Also translate executive summary
+                        en_summary = english_research.get('executive_summary', '')
+                        if en_summary:
+                            summary_result = await translator.translate(en_summary, language, source_language='en')
+                            translated_summary = summary_result.translated_text
+                        else:
+                            translated_summary = ''
+                        
+                        # Update the new research record with translated content
+                        with db.db_manager.get_session() as session:
+                            from src.database.models import Research as ResearchModel
+                            rec = session.query(ResearchModel).get(research_id)
+                            if rec:
+                                rec.status = 'completed'
+                                rec.completed_at = datetime.utcnow()
+                                rec.processing_time = (datetime.utcnow() - rec.started_at).total_seconds()
+                                rec.executive_summary = translated_summary
+                                rec.detailed_analysis = translated_report
+                                rec.report_content = translated_report
+                                rec.total_queries = english_research.get('total_queries', 0)
+                                rec.total_sources = english_research.get('total_sources', 0)
+                                rec.translation_enabled = True
+                                rec.research_metadata = {
+                                    'depth': depth,
+                                    'provider': primary_provider,
+                                    'cached_from': english_research['id'],
+                                    'cache_type': 'translate_only',
+                                }
+                        
+                        progress_tracker[research_id]['progress'] = 100
+                    
+                    asyncio.run(translate_cached())
+                    
+                except Exception as e:
+                    db.update_research_status(research_id, 'failed', f"Translation failed: {str(e)}")
+                    progress_tracker[research_id]['progress'] = 0
+            
+            thread = threading.Thread(target=run_translation_only)
+            thread.daemon = True
+            thread.start()
+            
+            flash(f'📋 Found cached English research — translating to {language} (much faster!)', 'info')
+            return redirect(url_for('research_progress', research_id=research_id))
+        
+        # Start full background research
         def run_research():
             try:
                 async def research_with_queue():
@@ -309,6 +416,7 @@ def create_production_app():
         research['progress'] = progress_info.get('progress', 100 if research['status'] == 'completed' else 0)
         metadata = research.get('research_metadata') or {}
         research['provider'] = metadata.get('provider', primary_provider)
+        research['depth'] = metadata.get('depth', 'basic')
         lang = research.get('research_language', 'en')
         research['language'] = lang
         research['error'] = research.get('error_message', '')

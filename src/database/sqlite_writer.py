@@ -3,7 +3,7 @@ SQLite implementation of ReportWriter interface with full research tracking.
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from urllib.parse import urlparse
@@ -12,6 +12,7 @@ import structlog
 from ..tools.report_writer import ReportWriter
 from .database import DatabaseManager
 from .models import Research, Query, Source
+from sqlalchemy.sql import func
 from ..utils.llm import normalize_text
 
 logger = structlog.get_logger()
@@ -274,6 +275,61 @@ class SQLiteWriter(ReportWriter):
             self.logger.error("Failed to update research status", research_id=research_id, error=str(e))
             return False
     
+    def find_cached_research(self, topic: str, language: str = 'en', ttl_hours: int = 24) -> Optional[Dict[str, Any]]:
+        """
+        Find a completed research with matching topic within TTL.
+        
+        Lookup order:
+        1. Exact match on topic + language + completed + within TTL
+        2. If language != 'en': look for English version (for translate-only reuse)
+        
+        Returns dict with keys: 'match_type' ('exact' or 'english_available'), 
+        'research' (full record dict), or None if nothing found.
+        """
+        import re
+        
+        # Normalize: lowercase, strip, collapse whitespace
+        normalized = re.sub(r'\s+', ' ', topic.strip().lower())
+        cutoff = datetime.utcnow() - timedelta(hours=ttl_hours)
+        
+        try:
+            with self.db_manager.get_session() as session:
+                # 1. Look for exact match (same topic + same language)
+                exact = session.query(Research).filter(
+                    func.lower(func.trim(Research.topic)) == normalized,
+                    Research.status == 'completed',
+                    Research.research_language == language,
+                    Research.completed_at >= cutoff,
+                    Research.report_content.isnot(None),
+                    Research.report_content != '',
+                ).order_by(Research.completed_at.desc()).first()
+                
+                if exact:
+                    self.logger.info("Topic cache hit (exact)", topic=topic, language=language, cached_id=exact.id)
+                    return {'match_type': 'exact', 'research': exact.to_dict()}
+                
+                # 2. If non-English, look for English version to translate
+                if language != 'en':
+                    english = session.query(Research).filter(
+                        func.lower(func.trim(Research.topic)) == normalized,
+                        Research.status == 'completed',
+                        Research.research_language == 'en',
+                        Research.completed_at >= cutoff,
+                        Research.report_content.isnot(None),
+                        Research.report_content != '',
+                    ).order_by(Research.completed_at.desc()).first()
+                    
+                    if english:
+                        self.logger.info("Topic cache hit (english available)", topic=topic, language=language, cached_id=english.id)
+                        return {'match_type': 'english_available', 'research': english.to_dict()}
+                
+                self.logger.debug("Topic cache miss", topic=topic, language=language)
+                return None
+                
+        except Exception as e:
+            self.logger.error("Topic cache lookup failed", topic=topic, error=str(e))
+            return None
+
     def get_database_stats(self) -> Dict[str, Any]:
         """Get database statistics."""
         return self.db_manager.get_database_stats()

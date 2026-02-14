@@ -128,6 +128,16 @@
                 </div>
                 
                 <div class="small">
+                    {% if key_sources %}
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>LLM Key:</span>
+                        <span class="text-{{ 'info' if '🔑' in key_sources.primary else 'muted' }}">{{ key_sources.primary }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Search Key:</span>
+                        <span class="text-{{ 'info' if '🔑' in key_sources.tavily else 'muted' }}">{{ key_sources.tavily }}</span>
+                    </div>
+                    {% endif %}
                     <div class="d-flex justify-content-between">
                         <span>System Health:</span>
                         <span class="text-success">✓ Online</span>

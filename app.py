@@ -62,7 +62,7 @@ def _cache_age_minutes(completed_at_iso: str) -> int:
 def create_production_app():
     """Create production-optimized Flask app."""
     
-    from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+    from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
     from flask_cors import CORS
     
     app = Flask(__name__)
@@ -122,6 +122,67 @@ def create_production_app():
     else:
         raise ValueError("No LLM provider available")
     
+    # ── BYOK helpers ──────────────────────────────────────────────────
+    
+    def _get_user_keys():
+        """Get user-provided API keys from session."""
+        return {
+            'openai': session.get('openai_api_key'),
+            'deepseek': session.get('deepseek_api_key'),
+            'anthropic': session.get('anthropic_api_key'),
+            'tavily': session.get('tavily_api_key'),
+        }
+    
+    def _resolve_keys():
+        """Resolve effective API keys: user keys override server keys."""
+        user = _get_user_keys()
+        return {
+            'openai_api_key': user['openai'] or os.environ.get('OPENAI_API_KEY'),
+            'deepseek_api_key': user['deepseek'] or os.environ.get('DEEPSEEK_API_KEY'),
+            'anthropic_api_key': user['anthropic'] or os.environ.get('ANTHROPIC_API_KEY'),
+            'tavily_api_key': user['tavily'] or os.environ.get('TAVILY_API_KEY'),
+        }
+    
+    def _resolve_providers(keys):
+        """Determine provider chain based on resolved keys."""
+        has_o = bool(keys['openai_api_key'])
+        has_d = bool(keys['deepseek_api_key'])
+        has_a = bool(keys['anthropic_api_key'])
+        
+        if has_o:
+            pri = "openai"
+            if has_d and has_a:
+                fb, ffb = "deepseek", "anthropic"
+            elif has_d:
+                fb, ffb = "deepseek", None
+            elif has_a:
+                fb, ffb = "anthropic", None
+            else:
+                fb, ffb = None, None
+        elif has_d:
+            pri = "deepseek"
+            fb = "anthropic" if has_a else None
+            ffb = None
+        elif has_a:
+            pri = "anthropic"
+            fb, ffb = None, None
+        else:
+            pri, fb, ffb = None, None, None
+        
+        return pri, fb, ffb
+    
+    def _key_source_label(provider):
+        """Return label showing whether user key or server key is active."""
+        user = _get_user_keys()
+        if user.get(provider):
+            return "🔑 Your key"
+        elif os.environ.get(f'{provider.upper()}_API_KEY'):
+            return "🖥️ Server key"
+        else:
+            return "❌ Not configured"
+    
+    # ── Routes ─────────────────────────────────────────────────────────
+    
     @app.route('/health')
     def health_check():
         """Health check endpoint for Render."""
@@ -138,17 +199,117 @@ def create_production_app():
     
     @app.route('/')
     def home():
+        # Resolve effective providers based on user keys
+        resolved = _resolve_keys()
+        eff_pri, eff_fb, eff_ffb = _resolve_providers(resolved)
+        
+        # Build cost status reflecting effective keys
+        user = _get_user_keys()
+        any_user_keys = any(v for v in user.values())
+        if any_user_keys:
+            eff_cost = "🔑 Using your API keys"
+        else:
+            eff_cost = cost_status
+        
         return render_template('home.html',
-            primary_provider=primary_provider,
-            fallback_provider=fallback_provider,
-            final_fallback=final_fallback,
-            cost_status=cost_status)
+            primary_provider=eff_pri or primary_provider,
+            fallback_provider=eff_fb or fallback_provider,
+            final_fallback=eff_ffb or final_fallback,
+            cost_status=eff_cost,
+            key_sources={
+                'primary': _key_source_label(eff_pri or primary_provider),
+                'tavily': _key_source_label('tavily'),
+            })
     
     @app.route('/history')
     def history():
         """Show research history."""
         researches = db.get_research_history(limit=100)
         return render_template('history.html', researches=researches)
+    
+    @app.route('/settings')
+    def settings():
+        """API key settings page."""
+        user_keys = _get_user_keys()
+        has_server = {
+            'tavily': bool(os.environ.get('TAVILY_API_KEY')),
+            'openai': bool(os.environ.get('OPENAI_API_KEY')),
+            'deepseek': bool(os.environ.get('DEEPSEEK_API_KEY')),
+            'anthropic': bool(os.environ.get('ANTHROPIC_API_KEY')),
+        }
+        return render_template('settings.html', user_keys=user_keys, has_server=has_server)
+    
+    @app.route('/settings/save', methods=['POST'])
+    def settings_save():
+        """Save user API keys to session."""
+        providers = ['tavily', 'openai', 'deepseek', 'anthropic']
+        saved = []
+        for p in providers:
+            key = request.form.get(f'{p}_api_key', '').strip()
+            if key:
+                session[f'{p}_api_key'] = key
+                saved.append(p.title())
+        
+        if saved:
+            flash(f'🔑 Saved keys for: {", ".join(saved)}', 'success')
+        else:
+            flash('No keys entered. Using server defaults.', 'info')
+        return redirect(url_for('settings'))
+    
+    @app.route('/settings/clear')
+    def settings_clear():
+        """Clear all user API keys from session."""
+        for p in ['tavily', 'openai', 'deepseek', 'anthropic']:
+            session.pop(f'{p}_api_key', None)
+        flash('🗑️ All your API keys have been cleared. Using server defaults.', 'info')
+        return redirect(url_for('settings'))
+    
+    @app.route('/api/settings/test-key', methods=['POST'])
+    def test_api_key():
+        """Test an API key by making a minimal API call."""
+        import asyncio as _asyncio
+        
+        data = request.get_json()
+        provider = data.get('provider', '')
+        api_key = data.get('api_key', '').strip()
+        
+        if not api_key:
+            return jsonify({'success': False, 'message': 'No API key provided'})
+        
+        try:
+            if provider == 'tavily':
+                from tavily import TavilyClient
+                client = TavilyClient(api_key=api_key)
+                client.search("test", max_results=1)
+                return jsonify({'success': True, 'message': 'Tavily key is valid ✓'})
+            
+            elif provider == 'openai':
+                import openai
+                client = openai.OpenAI(api_key=api_key)
+                models = client.models.list()
+                return jsonify({'success': True, 'message': f'OpenAI key is valid ✓ ({len(models.data)} models available)'})
+            
+            elif provider == 'deepseek':
+                import openai
+                client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+                models = client.models.list()
+                return jsonify({'success': True, 'message': f'DeepSeek key is valid ✓ ({len(models.data)} models available)'})
+            
+            elif provider == 'anthropic':
+                import anthropic
+                client = anthropic.Anthropic(api_key=api_key)
+                # Minimal call — count tokens is cheapest
+                resp = client.messages.count_tokens(
+                    model="claude-3-sonnet-20240229",
+                    messages=[{"role": "user", "content": "hi"}]
+                )
+                return jsonify({'success': True, 'message': f'Anthropic key is valid ✓'})
+            
+            else:
+                return jsonify({'success': False, 'message': f'Unknown provider: {provider}'})
+        
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)})
     
     @app.route('/submit_research', methods=['POST'])
     def submit_research():
@@ -162,6 +323,19 @@ def create_production_app():
         if len(topic) < 10:
             flash('Please enter a research topic with at least 10 characters.', 'error')
             return redirect(url_for('home'))
+        
+        # Resolve API keys (user keys override server keys)
+        # Must capture here — session not available in background thread
+        resolved = _resolve_keys()
+        eff_primary, eff_fallback, eff_final = _resolve_providers(resolved)
+        
+        if not eff_primary:
+            flash('❌ No LLM provider available. Please add at least one API key in Settings.', 'error')
+            return redirect(url_for('settings'))
+        
+        if not resolved['tavily_api_key']:
+            flash('❌ No Tavily API key available. Please add one in Settings.', 'error')
+            return redirect(url_for('settings'))
         
         force_fresh = request.form.get('force_fresh', '') == '1'
         
@@ -191,7 +365,7 @@ def create_production_app():
                 agent_name="MultiLangWebResearcher",
                 status='queued',
                 research_language=language,
-                research_metadata={'depth': depth, 'provider': primary_provider},
+                research_metadata={'depth': depth, 'provider': eff_primary, 'using_user_keys': bool(_get_user_keys().get(eff_primary))},
             )
             session.add(research)
             session.flush()
@@ -218,12 +392,12 @@ def create_production_app():
                         from src.tools.translation import TranslationTool
                         
                         llm_client = create_improved_llm_client(
-                            primary_provider=primary_provider,
-                            fallback_provider=fallback_provider,
-                            final_fallback_provider=final_fallback,
-                            deepseek_api_key=os.environ.get('DEEPSEEK_API_KEY'),
-                            openai_api_key=os.environ.get('OPENAI_API_KEY'),
-                            anthropic_api_key=os.environ.get('ANTHROPIC_API_KEY'),
+                            primary_provider=eff_primary,
+                            fallback_provider=eff_fallback,
+                            final_fallback_provider=eff_final,
+                            deepseek_api_key=resolved['deepseek_api_key'],
+                            openai_api_key=resolved['openai_api_key'],
+                            anthropic_api_key=resolved['anthropic_api_key'],
                             deepseek_model="deepseek-chat",
                             openai_model="gpt-4"
                         )
@@ -326,20 +500,20 @@ def create_production_app():
                         from src.tools.report_writer import MarkdownWriter
                         from src.agents.multilang_research_agent import MultiLanguageResearchAgent
                         
-                        # Initialize enhanced LLM client
+                        # Initialize enhanced LLM client (uses user keys if provided)
                         llm_client = create_improved_llm_client(
-                            primary_provider=primary_provider,
-                            fallback_provider=fallback_provider,
-                            final_fallback_provider=final_fallback,
-                            deepseek_api_key=os.environ.get('DEEPSEEK_API_KEY'),
-                            openai_api_key=os.environ.get('OPENAI_API_KEY'),
-                            anthropic_api_key=os.environ.get('ANTHROPIC_API_KEY'),
+                            primary_provider=eff_primary,
+                            fallback_provider=eff_fallback,
+                            final_fallback_provider=eff_final,
+                            deepseek_api_key=resolved['deepseek_api_key'],
+                            openai_api_key=resolved['openai_api_key'],
+                            anthropic_api_key=resolved['anthropic_api_key'],
                             deepseek_model="deepseek-chat",
                             openai_model="gpt-4"
                         )
                         
                         search_cache = SearchCache()
-                        web_search = WebSearchTool(api_key=os.environ.get('TAVILY_API_KEY'), search_cache=search_cache)
+                        web_search = WebSearchTool(api_key=resolved['tavily_api_key'], search_cache=search_cache)
                         report_writer = MarkdownWriter()
                         
                         # Create multilingual research agent with progress callback

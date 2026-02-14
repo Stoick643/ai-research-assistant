@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — API Keys{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-key me-2"></i>API Key Settings
+                </h4>
+                <small>Bring your own keys to use your own API accounts</small>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <strong>How it works:</strong> Enter your own API keys to use your accounts directly.
+                    Keys are stored in your browser session only — never saved to our database.
+                    When no user keys are provided, the server's default keys are used.
+                </div>
+
+                <form id="keys-form" method="POST" action="/settings/save">
+                    <!-- Tavily -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bi bi-search me-1"></i> Tavily (Web Search)</h6>
+                            <span id="status-tavily" class="badge bg-secondary">
+                                {{ '🔑 Your key' if user_keys.tavily else ('🖥️ Server key' if has_server.tavily else '❌ Not configured') }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="tavily_api_key" 
+                                    id="tavily_api_key"
+                                    placeholder="{{ '••••••' ~ user_keys.tavily[-4:] if user_keys.tavily else 'tvly-...' }}"
+                                    autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary btn-toggle-vis" data-target="tavily_api_key">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-test" data-provider="tavily">
+                                    Test
+                                </button>
+                            </div>
+                            <small class="text-muted">Get your key at <a href="https://tavily.com" target="_blank">tavily.com</a></small>
+                        </div>
+                    </div>
+
+                    <!-- OpenAI -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bi bi-cpu me-1"></i> OpenAI</h6>
+                            <span id="status-openai" class="badge bg-secondary">
+                                {{ '🔑 Your key' if user_keys.openai else ('🖥️ Server key' if has_server.openai else '❌ Not configured') }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="openai_api_key"
+                                    id="openai_api_key"
+                                    placeholder="{{ '••••••' ~ user_keys.openai[-4:] if user_keys.openai else 'sk-...' }}"
+                                    autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary btn-toggle-vis" data-target="openai_api_key">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-test" data-provider="openai">
+                                    Test
+                                </button>
+                            </div>
+                            <small class="text-muted">Get your key at <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a></small>
+                        </div>
+                    </div>
+
+                    <!-- DeepSeek -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bi bi-cpu me-1"></i> DeepSeek</h6>
+                            <span id="status-deepseek" class="badge bg-secondary">
+                                {{ '🔑 Your key' if user_keys.deepseek else ('🖥️ Server key' if has_server.deepseek else '❌ Not configured') }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="deepseek_api_key"
+                                    id="deepseek_api_key"
+                                    placeholder="{{ '••••••' ~ user_keys.deepseek[-4:] if user_keys.deepseek else 'sk-...' }}"
+                                    autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary btn-toggle-vis" data-target="deepseek_api_key">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-test" data-provider="deepseek">
+                                    Test
+                                </button>
+                            </div>
+                            <small class="text-muted">Get your key at <a href="https://platform.deepseek.com/api_keys" target="_blank">platform.deepseek.com</a></small>
+                        </div>
+                    </div>
+
+                    <!-- Anthropic -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bi bi-cpu me-1"></i> Anthropic</h6>
+                            <span id="status-anthropic" class="badge bg-secondary">
+                                {{ '🔑 Your key' if user_keys.anthropic else ('🖥️ Server key' if has_server.anthropic else '❌ Not configured') }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="anthropic_api_key"
+                                    id="anthropic_api_key"
+                                    placeholder="{{ '••••••' ~ user_keys.anthropic[-4:] if user_keys.anthropic else 'sk-ant-...' }}"
+                                    autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary btn-toggle-vis" data-target="anthropic_api_key">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-test" data-provider="anthropic">
+                                    Test
+                                </button>
+                            </div>
+                            <small class="text-muted">Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></small>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Save Keys
+                        </button>
+                        <a href="/settings/clear" class="btn btn-outline-danger">
+                            <i class="bi bi-trash me-1"></i>Clear All Keys
+                        </a>
+                    </div>
+                </form>
+
+                <!-- Test result area -->
+                <div id="test-result" class="alert mt-3" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    // Toggle password visibility
+    document.querySelectorAll('.btn-toggle-vis').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var input = document.getElementById(this.dataset.target);
+            var icon = this.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        });
+    });
+
+    // Test connection buttons
+    document.querySelectorAll('.btn-test').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var provider = this.dataset.provider;
+            var input = document.getElementById(provider + '_api_key');
+            var key = input.value.trim();
+            var resultEl = document.getElementById('test-result');
+            var statusEl = document.getElementById('status-' + provider);
+
+            if (!key) {
+                resultEl.className = 'alert alert-warning mt-3';
+                resultEl.textContent = 'Please enter a key to test.';
+                resultEl.style.display = '';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            resultEl.style.display = 'none';
+
+            fetch('/api/settings/test-key', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({provider: provider, api_key: key})
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false;
+                btn.innerHTML = 'Test';
+                resultEl.style.display = '';
+
+                if (data.success) {
+                    resultEl.className = 'alert alert-success mt-3';
+                    resultEl.innerHTML = '<i class="bi bi-check-circle me-1"></i><strong>' + 
+                        provider.charAt(0).toUpperCase() + provider.slice(1) + 
+                        ':</strong> ' + data.message;
+                } else {
+                    resultEl.className = 'alert alert-danger mt-3';
+                    resultEl.innerHTML = '<i class="bi bi-x-circle me-1"></i><strong>' + 
+                        provider.charAt(0).toUpperCase() + provider.slice(1) + 
+                        ':</strong> ' + data.message;
+                }
+            })
+            .catch(function(e) {
+                btn.disabled = false;
+                btn.innerHTML = 'Test';
+                resultEl.className = 'alert alert-danger mt-3';
+                resultEl.textContent = 'Connection test failed: ' + e.message;
+                resultEl.style.display = '';
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

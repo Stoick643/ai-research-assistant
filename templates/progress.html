@@ -34,15 +34,15 @@
                     </small>
                 </div>
 
-                <!-- Quick preview (shown while research is in progress) -->
+                <!-- Quick preview (grows with each search result) -->
                 <div id="preview-card" class="card border-info mb-3" style="display: none;">
                     <div class="card-header bg-info bg-opacity-10">
                         <h6 class="mb-0">
-                            <i class="bi bi-lightning-charge me-1"></i>Quick Preview
-                            <span class="badge bg-info ms-2">Full analysis in progress...</span>
+                            <i class="bi bi-lightning-charge me-1"></i>Quick Preview from Web Search
+                            <span id="preview-badge" class="badge bg-info ms-2">Searching...</span>
                         </h6>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                         <div id="preview-content"></div>
                     </div>
                 </div>
@@ -222,15 +222,23 @@
             lastLogCount = stepsLog.length;
         }
 
-        // Show preview during search phase only
+        // Show preview — grows during search, stays visible during analysis
+        var previewCard = document.getElementById('preview-card');
+        var previewContent = document.getElementById('preview-content');
+        var previewBadge = document.getElementById('preview-badge');
         var searchSteps = ['queued', 'initializing', 'generating_queries', 'searching'];
-        if (preview && searchSteps.indexOf(step) !== -1) {
-            var previewCard = document.getElementById('preview-card');
-            var previewContent = document.getElementById('preview-content');
+        
+        if (preview && status !== 'completed' && status !== 'failed') {
             previewCard.style.display = '';
             previewContent.innerHTML = marked.parse(preview);
-        } else if (searchSteps.indexOf(step) === -1) {
-            document.getElementById('preview-card').style.display = 'none';
+            
+            if (searchSteps.indexOf(step) !== -1) {
+                previewBadge.textContent = 'Searching...';
+                previewBadge.className = 'badge bg-info ms-2';
+            } else {
+                previewBadge.textContent = 'Full analysis in progress...';
+                previewBadge.className = 'badge bg-warning ms-2';
+            }
         }
 
         // Handle completion

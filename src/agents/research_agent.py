@@ -190,58 +190,68 @@ class ResearchAgent(ReasoningAgent):
         return queries
     
     async def _execute_searches(self, queries: List[str]) -> List[SearchResponse]:
-        """Execute web searches for all queries."""
+        """Execute web searches sequentially for live progress updates."""
         self.logger.info("Executing web searches", query_count=len(queries))
         
-        search_tasks = []
-        for query in queries:
-            task = self.web_search_tool.search(
-                query=query,
-                max_results=5,
-                search_depth="basic",
-                include_answer=True
-            )
-            search_tasks.append(task)
+        total = len(queries)
+        successful_responses = []
+        preview_parts = []
         
-        # Execute searches concurrently
-        try:
-            search_responses = await asyncio.gather(*search_tasks, return_exceptions=True)
+        # Sequential execution — each search reports progress with preview
+        for i, query in enumerate(queries):
+            query_num = i + 1
+            # Progress: 20% to 50% spread across searches
+            search_progress = 20 + int(30 * query_num / total)
             
-            # Filter out failed searches and collect results
-            successful_responses = []
-            first_preview = ''
-            for i, response in enumerate(search_responses):
-                if isinstance(response, Exception):
-                    self.logger.warning("Search failed", query=queries[i], error=str(response))
-                else:
-                    successful_responses.append(response)
-                    self.research_queries.append(queries[i])
-                    self.all_search_results.extend(response.results)
-                    self.all_search_responses.append(response)
-                    # Capture first Tavily AI answer as quick preview
-                    if not first_preview and response.answer:
-                        first_preview = response.answer
-            
-            self.logger.info(
-                "Web searches completed",
-                total_queries=len(queries),
-                successful=len(successful_responses),
-                total_results=len(self.all_search_results)
-            )
-            
-            # Report search completion with preview
             self._report_progress(
-                'searching', 50,
-                f'Found {len(self.all_search_results)} sources from {len(successful_responses)} searches',
-                f'{len(queries) - len(successful_responses)} failed' if len(successful_responses) < len(queries) else 'All searches successful',
-                preview=first_preview
+                'searching', search_progress - 5,
+                f'Searching {query_num}/{total}: "{query[:60]}"',
+                f'{len(self.all_search_results)} sources found so far',
+                preview='\n\n---\n\n'.join(preview_parts) if preview_parts else ''
             )
             
-            return successful_responses
-            
-        except Exception as e:
-            self.logger.error("Batch search execution failed", error=str(e))
-            raise
+            try:
+                response = await self.web_search_tool.search(
+                    query=query,
+                    max_results=5,
+                    search_depth="basic",
+                    include_answer=True
+                )
+                
+                successful_responses.append(response)
+                self.research_queries.append(query)
+                self.all_search_results.extend(response.results)
+                self.all_search_responses.append(response)
+                
+                # Add Tavily AI answer to rolling preview
+                if response.answer:
+                    preview_parts.append(f"**{query}**\n\n{response.answer}")
+                
+                self._report_progress(
+                    'searching', search_progress,
+                    f'Search {query_num}/{total} done — {len(response.results)} results',
+                    f'{len(self.all_search_results)} total sources',
+                    preview='\n\n---\n\n'.join(preview_parts)
+                )
+                
+                self.logger.info(
+                    "Search completed",
+                    query=query, query_num=query_num, total=total,
+                    results=len(response.results),
+                    has_answer=bool(response.answer)
+                )
+                
+            except Exception as e:
+                self.logger.warning("Search failed", query=query, error=str(e))
+        
+        self.logger.info(
+            "All web searches completed",
+            total_queries=total,
+            successful=len(successful_responses),
+            total_results=len(self.all_search_results)
+        )
+        
+        return successful_responses
     
     async def analyze_sources(self, topic: str, search_responses: List[SearchResponse]) -> str:
         """Analyze and synthesize information from search results (public method)."""

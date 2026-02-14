@@ -312,6 +312,10 @@ def create_production_app():
                             tracker['detail'] = detail
                             if preview:
                                 tracker['preview'] = preview
+                            # Keep log of completed steps
+                            if 'steps_log' not in tracker:
+                                tracker['steps_log'] = []
+                            tracker['steps_log'].append({'step': step, 'message': message, 'progress': progress})
                             progress_tracker[research_id] = tracker
                         
                         on_progress('initializing', 5, 'Initializing research pipeline...', f'Topic: {topic[:80]}')
@@ -511,6 +515,7 @@ def create_production_app():
         research['step_message'] = progress_info.get('message', '')
         research['step_detail'] = progress_info.get('detail', '')
         research['preview'] = progress_info.get('preview', '')
+        research['steps_log'] = progress_info.get('steps_log', [])
         
         return jsonify(research)
     

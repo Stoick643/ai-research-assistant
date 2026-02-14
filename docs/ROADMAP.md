@@ -44,19 +44,21 @@
 
 ---
 
-## Phase 3: Deployment (Fly.io) ⬅️ In Progress
+## Phase 3: Deployment (Fly.io) ✅ Done
 
 **Goal**: Make the app publicly accessible.
 
+**Live at: [airesearchassistant.fly.dev](https://airesearchassistant.fly.dev/)**
+
 ### Setup ✅ Done
-- Dockerfile (Python 3.13, gunicorn)
+- Dockerfile (Python 3.13, gunicorn, single worker)
 - `fly.toml` configuration (ams region, persistent volume)
 - GitHub Actions auto-deploy on push (`.github/workflows/fly.yml`)
 - Persistent volume `ai_researcher` mounted at `/data`
 - Environment variables configured as Fly.io secrets
+- DB init handles existing tables gracefully
 
-### Remaining: Production hardening
-- Fix DB init crash on deploy (table already exists — fix pushed, needs verification)
+### Future: Production hardening
 - CSRF protection (already have flask-wtf)
 - Rate limiting on endpoints (prevent abuse)
 - Basic auth or API key for access control
@@ -95,11 +97,18 @@
 - JS polling every 3s replaces meta-refresh (no full page reload during progress)
 - `/api/research/{id}/status` returns step, message, detail, preview
 
-### 5b. Quick preview from Tavily ✅
-- First Tavily AI answer captured as preview during search phase
-- Shown in a card while full analysis runs: "⚡ Quick Preview"
-- Preview auto-hides when research completes
-- Translate-only path shows English summary as preview while translating
+### 5b. Sequential search with rolling preview ✅
+- Searches run sequentially (not concurrent) for steady UX updates
+- After each search, Tavily AI answer appended to preview card
+- ~5 preview updates, one every 3-5s during search phase
+- Per-query progress messages: "🔍 Searching 2/5: quantum computing..."
+- Preview stays visible during analysis with badge "Full analysis in progress..."
+
+### 5c. Streaming LLM responses ⬅️ Next
+- Add `generate_stream` to LLM clients (OpenAI, DeepSeek, Anthropic)
+- Stream analysis and report writing — text flows into preview in real-time
+- Eliminates the ~35s silent gap after searches complete
+- Full timeline becomes: searches (preview grows) → analysis (streams) → report (streams) → done
 
 ---
 

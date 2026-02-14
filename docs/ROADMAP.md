@@ -84,23 +84,22 @@
 
 ---
 
-## Phase 5: Live Progress & Quick Preview
+## Phase 5: Live Progress & Quick Preview ✅ Done
 
 **Goal**: Better user engagement during the ~60s research wait.
 
-### 4a. Live status messages
-- Push real-time agent steps to the UI: "Generating search queries...",
-  "Searching: quantum computing breakthroughs 2025", "Analyzing 15 sources...",
-  "Synthesizing report..."
-- Agent already goes through distinct phases — surface them
-- Use SSE (Server-Sent Events) or polling with status messages
-- Replace fake progress % (20→40→60→100) with real step-based progress
+### 5a. Live status messages ✅
+- `progress_callback` on `ResearchAgent` — called at each pipeline step
+- Real steps: initializing → generating_queries → searching → analyzing → writing_report → saving → translating → completed
+- Step icons (🧠🔍📊📝💾🌐✅) and descriptive messages in UI
+- JS polling every 3s replaces meta-refresh (no full page reload during progress)
+- `/api/research/{id}/status` returns step, message, detail, preview
 
-### 4b. Quick preview from Tavily
-- After first search completes (~5s), show Tavily's AI answer as instant preview
-- User gets something useful immediately while full LLM analysis runs
-- Full report replaces preview when ready
-- Preview clearly labeled: "Quick preview — full analysis in progress..."
+### 5b. Quick preview from Tavily ✅
+- First Tavily AI answer captured as preview during search phase
+- Shown in a card while full analysis runs: "⚡ Quick Preview"
+- Preview auto-hides when research completes
+- Translate-only path shows English summary as preview while translating
 
 ---
 

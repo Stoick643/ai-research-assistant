@@ -208,7 +208,12 @@ def create_production_app():
                 try:
                     async def translate_cached():
                         db.update_research_status(research_id, 'in_progress')
-                        progress_tracker[research_id]['progress'] = 30
+                        progress_tracker[research_id] = {
+                            'progress': 20, 'step': 'initializing',
+                            'message': 'Found cached English research — preparing translation...',
+                            'detail': f'Translating to {language.upper()}',
+                            'preview': english_research.get('executive_summary', '')[:500],
+                        }
                         
                         from src.tools.translation import TranslationTool
                         
@@ -224,14 +229,22 @@ def create_production_app():
                         )
                         
                         translator = TranslationTool(llm_client=llm_client)
-                        progress_tracker[research_id]['progress'] = 50
+                        progress_tracker[research_id].update({
+                            'progress': 50, 'step': 'translating',
+                            'message': f'Translating report to {language.upper()}...',
+                            'detail': 'Translating main report content',
+                        })
                         
                         # Translate the English report content
                         en_report = english_research.get('report_content', '')
                         report_result = await translator.translate(en_report, language, source_language='en')
                         translated_report = report_result.translated_text
                         
-                        progress_tracker[research_id]['progress'] = 80
+                        progress_tracker[research_id].update({
+                            'progress': 80, 'step': 'translating',
+                            'message': f'Translating summary to {language.upper()}...',
+                            'detail': 'Almost done',
+                        })
                         
                         # Also translate executive summary
                         en_summary = english_research.get('executive_summary', '')
@@ -262,13 +275,19 @@ def create_production_app():
                                     'cache_type': 'translate_only',
                                 }
                         
-                        progress_tracker[research_id]['progress'] = 100
+                        progress_tracker[research_id].update({
+                            'progress': 100, 'step': 'completed',
+                            'message': 'Translation complete!', 'detail': '',
+                        })
                     
                     asyncio.run(translate_cached())
                     
                 except Exception as e:
                     db.update_research_status(research_id, 'failed', f"Translation failed: {str(e)}")
-                    progress_tracker[research_id]['progress'] = 0
+                    progress_tracker[research_id].update({
+                        'progress': 0, 'step': 'failed',
+                        'message': f'Translation failed: {str(e)}', 'detail': '',
+                    })
             
             thread = threading.Thread(target=run_translation_only)
             thread.daemon = True
@@ -283,7 +302,19 @@ def create_production_app():
                 async def research_with_queue():
                     async with research_queue:
                         db.update_research_status(research_id, 'in_progress')
-                        progress_tracker[research_id]['progress'] = 20
+                        
+                        # Progress callback — agent calls this at each pipeline step
+                        def on_progress(step, progress, message, detail='', preview=''):
+                            tracker = progress_tracker.get(research_id, {})
+                            tracker['progress'] = progress
+                            tracker['step'] = step
+                            tracker['message'] = message
+                            tracker['detail'] = detail
+                            if preview:
+                                tracker['preview'] = preview
+                            progress_tracker[research_id] = tracker
+                        
+                        on_progress('initializing', 5, 'Initializing research pipeline...', f'Topic: {topic[:80]}')
                         
                         # Import research components
                         from src.tools.web_search import WebSearchTool
@@ -307,9 +338,7 @@ def create_production_app():
                         web_search = WebSearchTool(api_key=os.environ.get('TAVILY_API_KEY'), search_cache=search_cache)
                         report_writer = MarkdownWriter()
                         
-                        progress_tracker[research_id]['progress'] = 40
-                        
-                        # Create multilingual research agent
+                        # Create multilingual research agent with progress callback
                         agent = MultiLanguageResearchAgent(
                             name="MultiLangWebResearcher",
                             llm_client=llm_client,
@@ -319,8 +348,7 @@ def create_production_app():
                             target_languages=[language] if language != 'en' else ['en'],
                             enable_translation=True
                         )
-                        
-                        progress_tracker[research_id]['progress'] = 60
+                        agent.progress_callback = on_progress
                         
                         # Run research
                         if language != 'en':
@@ -330,11 +358,14 @@ def create_production_app():
                                 target_languages=[language, 'en'],
                                 search_depth=depth
                             )
+                            on_progress('translating', 95, f'Translating to {language.upper()}...', '')
                         else:
                             result = await agent.conduct_research(
                                 topic=topic,
                                 focus_areas=focus_areas.split(',') if focus_areas else None
                             )
+                        
+                        on_progress('completed', 100, 'Research complete!', '')
                         
                         # Update database with results
                         with db.db_manager.get_session() as session:
@@ -357,8 +388,6 @@ def create_production_app():
                                     'translations': result.get('translations', {}),
                                 }
                                 rec.translation_enabled = bool(result.get('translations'))
-                        
-                        progress_tracker[research_id]['progress'] = 100
                 
                 asyncio.run(research_with_queue())
                 
@@ -372,7 +401,10 @@ def create_production_app():
                     friendly_error = f"Research failed: {error_msg}"
                 
                 db.update_research_status(research_id, status_msg, friendly_error)
-                progress_tracker[research_id]['progress'] = 0
+                progress_tracker[research_id] = {
+                    'progress': 0, 'step': 'failed',
+                    'message': friendly_error, 'detail': '',
+                }
         
         # Start research in background thread
         thread = threading.Thread(target=run_research)
@@ -467,14 +499,18 @@ def create_production_app():
     
     @app.route('/api/research/<int:research_id>/status')
     def research_status_api(research_id):
-        """Get research status as JSON."""
+        """Get research status as JSON with live progress details."""
         research = db.get_research_by_id(research_id)
         if not research:
             return jsonify({'error': 'Research not found'}), 404
         
-        # Merge transient progress
+        # Merge transient progress info
         progress_info = progress_tracker.get(research_id, {})
         research['progress'] = progress_info.get('progress', 100 if research['status'] == 'completed' else 0)
+        research['step'] = progress_info.get('step', 'completed' if research['status'] == 'completed' else 'queued')
+        research['step_message'] = progress_info.get('message', '')
+        research['step_detail'] = progress_info.get('detail', '')
+        research['preview'] = progress_info.get('preview', '')
         
         return jsonify(research)
     

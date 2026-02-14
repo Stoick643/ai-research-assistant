@@ -55,8 +55,17 @@ class ResearchAgent(ReasoningAgent):
         self.all_search_responses = []
         self.research_start_time = None
         self.current_research_id = None
+        self.progress_callback = None  # Optional callback for live progress
         
         self.logger = logger.bind(agent=name, type="research")
+    
+    def _report_progress(self, step: str, progress: int, message: str, detail: str = '', preview: str = ''):
+        """Report progress via callback if set."""
+        if self.progress_callback:
+            try:
+                self.progress_callback(step=step, progress=progress, message=message, detail=detail, preview=preview)
+            except Exception as e:
+                self.logger.warning("Progress callback failed", error=str(e))
     
     async def conduct_research(self, topic: str, focus_areas: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -86,18 +95,23 @@ class ResearchAgent(ReasoningAgent):
         
         try:
             # Phase 1: Generate research queries
+            self._report_progress('generating_queries', 10, 'Generating search queries...', f'Topic: {topic[:80]}')
             search_queries = await self._generate_search_queries(topic, focus_areas)
+            self._report_progress('searching', 20, f'Starting web search...', f'{len(search_queries)} queries planned')
             
             # Phase 2: Execute web searches
             all_results = await self._execute_searches(search_queries)
             
             # Phase 3: Analyze and synthesize sources
+            self._report_progress('analyzing', 60, f'Analyzing {len(self.all_search_results)} sources...', 'Synthesizing findings')
             analysis = await self._analyze_sources(topic, all_results)
             
             # Phase 4: Generate structured report
+            self._report_progress('writing_report', 75, 'Writing research report...', 'Structuring findings into report')
             report_content = await self._generate_report(topic, analysis, all_results)
             
             # Phase 5: Save report (includes database tracking)
+            self._report_progress('saving', 90, 'Saving report...', '')
             processing_time = time.time() - self.research_start_time
             report_path = await self._save_research_report(
                 topic, report_content, processing_time, 
@@ -195,6 +209,7 @@ class ResearchAgent(ReasoningAgent):
             
             # Filter out failed searches and collect results
             successful_responses = []
+            first_preview = ''
             for i, response in enumerate(search_responses):
                 if isinstance(response, Exception):
                     self.logger.warning("Search failed", query=queries[i], error=str(response))
@@ -203,12 +218,23 @@ class ResearchAgent(ReasoningAgent):
                     self.research_queries.append(queries[i])
                     self.all_search_results.extend(response.results)
                     self.all_search_responses.append(response)
+                    # Capture first Tavily AI answer as quick preview
+                    if not first_preview and response.answer:
+                        first_preview = response.answer
             
             self.logger.info(
                 "Web searches completed",
                 total_queries=len(queries),
                 successful=len(successful_responses),
                 total_results=len(self.all_search_results)
+            )
+            
+            # Report search completion with preview
+            self._report_progress(
+                'searching', 50,
+                f'Found {len(self.all_search_results)} sources from {len(successful_responses)} searches',
+                f'{len(queries) - len(successful_responses)} failed' if len(successful_responses) < len(queries) else 'All searches successful',
+                preview=first_preview
             )
             
             return successful_responses

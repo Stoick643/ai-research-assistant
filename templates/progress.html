@@ -222,12 +222,15 @@
             lastLogCount = stepsLog.length;
         }
 
-        // Show preview if available and still in progress
-        if (preview && status !== 'completed') {
+        // Show preview during search phase only
+        var searchSteps = ['queued', 'initializing', 'generating_queries', 'searching'];
+        if (preview && searchSteps.indexOf(step) !== -1) {
             var previewCard = document.getElementById('preview-card');
             var previewContent = document.getElementById('preview-content');
             previewCard.style.display = '';
             previewContent.innerHTML = marked.parse(preview);
+        } else if (searchSteps.indexOf(step) === -1) {
+            document.getElementById('preview-card').style.display = 'none';
         }
 
         // Handle completion

@@ -71,6 +71,7 @@ class Research(Base):
             "executive_summary": self.executive_summary,
             "key_findings": self.key_findings,
             "detailed_analysis": self.detailed_analysis,
+            "report_content": self.report_content,
             "report_path": self.report_path,
             "total_queries": self.total_queries,
             "total_sources": self.total_sources,

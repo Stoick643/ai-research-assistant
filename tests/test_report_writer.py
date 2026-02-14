@@ -11,7 +11,7 @@ from datetime import datetime
 from unittest.mock import patch, mock_open
 
 from src.tools.report_writer import (
-    ReportWriter, MarkdownWriter, SQLiteWriter, ReportFormatter
+    ReportWriter, MarkdownWriter, ReportFormatter
 )
 
 
@@ -77,7 +77,7 @@ class TestMarkdownWriter:
         """Test filename sanitization."""
         # Test invalid characters
         result = markdown_writer._sanitize_filename("test<>:file/name|?.txt")
-        assert result == "test___file_name____txt"
+        assert result == "test___file_name__.txt"
         
         # Test spaces
         result = markdown_writer._sanitize_filename("test   file   name")
@@ -139,23 +139,6 @@ class TestMarkdownWriter:
         with patch('pathlib.Path.write_text', side_effect=IOError("Write failed")):
             with pytest.raises(RuntimeError, match="Failed to save report: Write failed"):
                 await markdown_writer.save_report("content", "filename")
-
-
-class TestSQLiteWriter:
-    """Test suite for SQLiteWriter."""
-    
-    def test_init(self):
-        """Test SQLiteWriter initialization."""
-        writer = SQLiteWriter("test.db")
-        assert writer.db_path == Path("test.db")
-    
-    @pytest.mark.asyncio
-    async def test_save_report_not_implemented(self):
-        """Test that SQLiteWriter raises NotImplementedError."""
-        writer = SQLiteWriter()
-        
-        with pytest.raises(NotImplementedError, match="SQLite writer will be implemented"):
-            await writer.save_report("content", "filename")
 
 
 class TestReportFormatter:

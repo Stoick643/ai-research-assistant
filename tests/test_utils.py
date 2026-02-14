@@ -1,6 +1,6 @@
 import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from src.utils.config import Config, LLMConfig, AgentConfig
 from src.utils.llm import create_llm_client, OpenAIClient, AnthropicClient
 
@@ -85,7 +85,7 @@ class TestLLMClient:
         with patch('openai.AsyncOpenAI') as mock_openai:
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Test response"
-            mock_openai.return_value.chat.completions.create.return_value = mock_response
+            mock_openai.return_value.chat.completions.create = AsyncMock(return_value=mock_response)
             
             client = OpenAIClient(api_key="test-key")
             response = await client.generate("System prompt", "User message")
@@ -98,7 +98,7 @@ class TestLLMClient:
         with patch('anthropic.AsyncAnthropic') as mock_anthropic:
             mock_response = MagicMock()
             mock_response.content[0].text = "Test response"
-            mock_anthropic.return_value.messages.create.return_value = mock_response
+            mock_anthropic.return_value.messages.create = AsyncMock(return_value=mock_response)
             
             client = AnthropicClient(api_key="test-key")
             response = await client.generate("System prompt", "User message")

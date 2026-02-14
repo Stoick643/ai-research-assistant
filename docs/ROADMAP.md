@@ -31,6 +31,12 @@
 - Generates from `research.report_content` in DB
 - Remove auto-write to `reports/` folder
 
+### 2g. Fix & extend tests
+- Fix broken existing tests (removed `SQLiteWriter` stub import, etc.)
+- Add tests for: search cache, history route, download route, LLM translation provider
+- Smoke test: app starts and serves pages
+- Run full suite green before deployment
+
 ### Unplanned bonus (done)
 - LLM translation provider (`src/tools/providers/llm_translate.py`)
 - Fixed progress bar animation, markdown rendering

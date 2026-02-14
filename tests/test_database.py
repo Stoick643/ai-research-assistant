@@ -24,16 +24,20 @@ class TestDatabaseModels:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
         yield db_path
-        # Cleanup
-        if os.path.exists(db_path):
+        # Cleanup — ignore errors on Windows (file locks)
+        try:
             os.unlink(db_path)
+        except OSError:
+            pass
     
     @pytest.fixture
     def db_manager(self, temp_db_path):
         """Create database manager with temporary database."""
         manager = DatabaseManager(database_path=temp_db_path)
         manager.initialize()
-        return manager
+        yield manager
+        if manager.engine:
+            manager.engine.dispose()
     
     def test_research_model_creation(self, db_manager):
         """Test creating Research model instances."""
@@ -135,7 +139,7 @@ class TestDatabaseModels:
                 focus_areas=["AI", "ML"],
                 processing_time=30.0,
                 status="completed",
-                metadata={"test": "value"}
+                research_metadata={"test": "value"}
             )
             session.add(research)
             session.commit()
@@ -146,7 +150,7 @@ class TestDatabaseModels:
             assert research_dict["focus_areas"] == ["AI", "ML"]
             assert research_dict["processing_time"] == 30.0
             assert research_dict["status"] == "completed"
-            assert research_dict["metadata"] == {"test": "value"}
+            assert research_dict["research_metadata"] == {"test": "value"}
 
 
 class TestDatabaseManager:
@@ -158,8 +162,10 @@ class TestDatabaseManager:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
         yield db_path
-        if os.path.exists(db_path):
+        try:
             os.unlink(db_path)
+        except OSError:
+            pass
     
     def test_database_manager_initialization(self, temp_db_path):
         """Test database manager initialization."""
@@ -172,6 +178,7 @@ class TestDatabaseManager:
         # Test database URL construction
         expected_url = f"sqlite:///{temp_db_path}"
         assert manager.database_url == expected_url
+        manager.engine.dispose()
     
     def test_database_stats(self, temp_db_path):
         """Test database statistics functionality."""
@@ -210,6 +217,7 @@ class TestDatabaseManager:
         assert stats["total_queries"] == 1
         assert stats["total_sources"] == 1
         assert stats["average_processing_time"] == 25.5
+        manager.engine.dispose()
     
     def test_cleanup_old_data(self, temp_db_path):
         """Test cleanup of old research data."""
@@ -244,6 +252,7 @@ class TestDatabaseManager:
             remaining = session.query(Research).all()
             assert len(remaining) == 1
             assert remaining[0].topic == "New Research"
+        manager.engine.dispose()
 
 
 class TestSQLiteWriter:
@@ -255,13 +264,18 @@ class TestSQLiteWriter:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
         yield db_path
-        if os.path.exists(db_path):
+        try:
             os.unlink(db_path)
+        except OSError:
+            pass
     
     @pytest.fixture
     def sqlite_writer(self, temp_db_path):
         """Create SQLiteWriter instance."""
-        return SQLiteWriter(database_path=temp_db_path)
+        writer = SQLiteWriter(database_path=temp_db_path)
+        yield writer
+        if writer.db_manager.engine:
+            writer.db_manager.engine.dispose()
     
     @pytest.mark.asyncio
     async def test_save_report_basic(self, sqlite_writer):
@@ -359,13 +373,18 @@ class TestResearchAnalytics:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
         yield db_path
-        if os.path.exists(db_path):
+        try:
             os.unlink(db_path)
+        except OSError:
+            pass
     
     @pytest.fixture
     def analytics(self, temp_db_path):
         """Create ResearchAnalytics instance."""
-        return ResearchAnalytics(database_path=temp_db_path)
+        a = ResearchAnalytics(database_path=temp_db_path)
+        yield a
+        if a.db_manager.engine:
+            a.db_manager.engine.dispose()
     
     def test_get_research_trends_empty(self, analytics):
         """Test research trends with empty database."""

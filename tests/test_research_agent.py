@@ -5,6 +5,7 @@ Tests for the ResearchAgent module.
 import pytest
 import json
 import asyncio
+from datetime import datetime
 from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
 
@@ -265,7 +266,8 @@ class TestResearchAgent:
         result_path = await research_agent._save_research_report(
             "AI Trends 2025", 
             report_content, 
-            processing_time
+            processing_time,
+            start_datetime=datetime.utcnow()
         )
         
         assert result_path == "/tmp/test_report.md"

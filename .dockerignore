@@ -1,0 +1,108 @@
+# flyctl launch added from .gitignore
+# Python
+**\__pycache__
+**\*.py[cod]
+**\*$py.class
+**\*.so
+**\.Python
+**\build
+**\develop-eggs
+**\dist
+**\downloads
+**\eggs
+**\.eggs
+**\lib
+**\lib64
+**\parts
+**\sdist
+**\var
+**\wheels
+**\*.egg-info
+**\.installed.cfg
+**\*.egg
+**\MANIFEST
+
+# Environment variables
+**\.env
+**\.env.local
+**\.env.development
+**\.env.test
+**\.env.production.local
+
+# Virtual environments
+**\venv
+**\ENV
+**\env
+**\.venv
+
+# IDE
+**\.vscode
+**\.idea
+**\*.swp
+**\*.swo
+**\*~
+
+# OS
+**\.DS_Store
+**\.DS_Store?
+**\._*
+**\.Spotlight-V100
+**\.Trashes
+**\ehthumbs.db
+**\Thumbs.db
+
+# Logs
+**\*.log
+**\logs
+
+# Database files
+**\*.db
+**\*.sqlite
+**\*.sqlite3
+
+# Temporary files
+**\tmp
+**\temp
+**\.tmp
+
+# Cache directories
+**\.cache
+**\.pytest_cache
+
+# Flask session files
+**\flask_session
+
+# Reports (keep structure but ignore content)
+**\reports\*.md
+**\reports\*.pdf
+**\reports\*.html
+
+# Data & cache databases
+**\data
+
+
+# Testing
+**\.coverage
+**\htmlcov
+**\.tox
+**\.pytest_cache
+
+# flyctl launch added from .idea\.gitignore
+# Default ignored files
+.idea\shelf
+.idea\workspace.xml
+# Editor-based HTTP Client requests
+.idea\httpRequests
+
+# flyctl launch added from .pytest_cache\.gitignore
+# Created by pytest automatically.
+.pytest_cache\**\*
+
+# flyctl launch added from .venv\.gitignore
+# created by virtualenv automatically
+.venv\**\*
+
+# flyctl launch added from htmlcov\.gitignore
+# Created by coverage.py
+htmlcov\**\*
+fly.toml

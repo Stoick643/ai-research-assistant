@@ -66,11 +66,16 @@ def create_production_app():
     # Enable CORS for production
     CORS(app, origins=["https://*.onrender.com", "https://localhost:*"])
     
-    # Production storage (in-memory for now, can be upgraded to Redis)
-    research_storage = {}
+    # In-memory progress tracking (transient UI state only)
+    # All persistent data lives in the database
+    progress_tracker = {}
+    
+    # Initialize database
+    from src.database.sqlite_writer import SQLiteWriter as DbWriter
+    db = DbWriter()
     
     # Import improved components
-    from improved_rate_limiting import create_improved_llm_client, research_queue
+    from src.utils.rate_limiting import create_improved_llm_client, research_queue
     
     # Determine provider configuration
     has_deepseek = bool(os.environ.get('DEEPSEEK_API_KEY'))
@@ -322,32 +327,35 @@ def create_production_app():
             flash('Please enter a research topic with at least 10 characters.', 'error')
             return redirect(url_for('home'))
         
-        # Create research ID
-        research_id = len(research_storage) + 1
+        # Create research record in database
+        from src.database.models import Research
+        with db.db_manager.get_session() as session:
+            research = Research(
+                topic=topic,
+                focus_areas=focus_areas.split(',') if focus_areas else [],
+                agent_name="MultiLangWebResearcher",
+                status='queued',
+                research_language=language,
+                research_metadata={'depth': depth, 'provider': primary_provider},
+            )
+            session.add(research)
+            session.flush()
+            research_id = research.id
         
-        # Store research request
-        research_storage[research_id] = {
-            'id': research_id,
-            'topic': topic,
-            'focus_areas': focus_areas.split(',') if focus_areas else [],
-            'language': language,
-            'depth': depth,
-            'status': 'queued',
-            'started_at': datetime.utcnow(),
-            'progress': 0,
-            'provider': primary_provider
-        }
+        # Track progress in memory (transient)
+        progress_tracker[research_id] = {'progress': 0}
         
         # Start background research
         def run_research():
             try:
                 async def research_with_queue():
                     async with research_queue:
-                        research_storage[research_id]['status'] = 'in_progress'
-                        research_storage[research_id]['progress'] = 20
+                        db.update_research_status(research_id, 'in_progress')
+                        progress_tracker[research_id]['progress'] = 20
                         
                         # Import research components
                         from src.tools.web_search import WebSearchTool
+                        from src.tools.search_cache import SearchCache
                         from src.tools.report_writer import MarkdownWriter
                         from src.agents.multilang_research_agent import MultiLanguageResearchAgent
                         
@@ -363,10 +371,11 @@ def create_production_app():
                             openai_model="gpt-4"
                         )
                         
-                        web_search = WebSearchTool(api_key=os.environ.get('TAVILY_API_KEY'))
+                        search_cache = SearchCache()
+                        web_search = WebSearchTool(api_key=os.environ.get('TAVILY_API_KEY'), search_cache=search_cache)
                         report_writer = MarkdownWriter()
                         
-                        research_storage[research_id]['progress'] = 40
+                        progress_tracker[research_id]['progress'] = 40
                         
                         # Create multilingual research agent
                         agent = MultiLanguageResearchAgent(
@@ -379,7 +388,7 @@ def create_production_app():
                             enable_translation=True
                         )
                         
-                        research_storage[research_id]['progress'] = 60
+                        progress_tracker[research_id]['progress'] = 60
                         
                         # Run research
                         if language != 'en':
@@ -395,20 +404,29 @@ def create_production_app():
                                 focus_areas=focus_areas.split(',') if focus_areas else None
                             )
                         
-                        # Store results
-                        research_storage[research_id].update({
-                            'status': 'completed',
-                            'progress': 100,
-                            'executive_summary': result.get('analysis', ''),
-                            'detailed_analysis': result.get('analysis', ''),
-                            'total_queries': result.get('total_queries', 0),
-                            'total_sources': result.get('total_sources', 0),
-                            'report_path': result.get('report_path', ''),
-                            'language_metadata': result.get('language_metadata', {}),
-                            'translations': result.get('translations', {}),
-                            'has_translations': bool(result.get('translations')),
-                            'completed_at': datetime.utcnow()
-                        })
+                        # Update database with results
+                        with db.db_manager.get_session() as session:
+                            from src.database.models import Research as ResearchModel
+                            rec = session.query(ResearchModel).get(research_id)
+                            if rec:
+                                rec.status = 'completed'
+                                rec.completed_at = datetime.utcnow()
+                                rec.processing_time = (datetime.utcnow() - rec.started_at).total_seconds()
+                                rec.executive_summary = result.get('analysis', '')
+                                rec.detailed_analysis = result.get('analysis', '')
+                                rec.report_content = result.get('report_content', '')
+                                rec.total_queries = result.get('total_queries', 0)
+                                rec.total_sources = result.get('total_sources', 0)
+                                rec.report_path = result.get('report_path', '')
+                                rec.research_metadata = {
+                                    'depth': depth,
+                                    'provider': primary_provider,
+                                    'language_metadata': result.get('language_metadata', {}),
+                                    'translations': result.get('translations', {}),
+                                }
+                                rec.translation_enabled = bool(result.get('translations'))
+                        
+                        progress_tracker[research_id]['progress'] = 100
                 
                 asyncio.run(research_with_queue())
                 
@@ -421,11 +439,8 @@ def create_production_app():
                     status_msg = 'failed'
                     friendly_error = f"Research failed: {error_msg}"
                 
-                research_storage[research_id].update({
-                    'status': status_msg,
-                    'error': friendly_error,
-                    'completed_at': datetime.utcnow()
-                })
+                db.update_research_status(research_id, status_msg, friendly_error)
+                progress_tracker[research_id]['progress'] = 0
         
         # Start research in background thread
         thread = threading.Thread(target=run_research)
@@ -445,10 +460,30 @@ def create_production_app():
     def research_progress(research_id):
         """Show research progress."""
         
-        research = research_storage.get(research_id)
+        research = db.get_research_by_id(research_id)
         if not research:
             flash('Research not found.', 'error')
             return redirect(url_for('home'))
+        
+        # Merge transient progress info
+        progress_info = progress_tracker.get(research_id, {})
+        research['progress'] = progress_info.get('progress', 100 if research['status'] == 'completed' else 0)
+        metadata = research.get('research_metadata') or {}
+        research['provider'] = metadata.get('provider', primary_provider)
+        lang = research.get('research_language', 'en')
+        research['language'] = lang
+        research['error'] = research.get('error_message', '')
+        
+        # Use translated summary if available for non-English research
+        research['has_translations'] = False
+        if lang != 'en' and research['status'] == 'completed':
+            translations = metadata.get('translations', {})
+            lang_data = translations.get(lang, {})
+            translated_summary = lang_data.get('executive_summary', {})
+            translated_text = translated_summary.get('text', '')
+            if translated_text:
+                research['executive_summary'] = translated_text
+                research['has_translations'] = True
         
         status_messages = {
             'queued': f'Queued - Waiting for {primary_provider.title()} processing slot',
@@ -496,7 +531,7 @@ def create_production_app():
                                 <span>{{ research.progress }}%</span>
                             </div>
                             <div class="progress">
-                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                                <div class="progress-bar {% if research.status in ['queued', 'in_progress'] %}progress-bar-striped progress-bar-animated{% endif %} bg-{{ 'success' if research.status == 'completed' else 'danger' if research.status == 'failed' else 'primary' }}" 
                                      style="width: {{ research.progress }}%"></div>
                             </div>
                             <small class="text-muted">Status: {{ status_messages.get(research.status, research.status).title() }}</small>
@@ -506,7 +541,8 @@ def create_production_app():
                         <div class="alert alert-success">
                             <h5>✅ Research Completed!</h5>
                             <p><strong>Executive Summary:</strong></p>
-                            <p>{{ research.executive_summary }}</p>
+                            <div id="research-content"></div>
+                            <script id="raw-content" type="application/json">{{ research.executive_summary | tojson }}</script>
                             
                             {% if research.has_translations %}
                             <div class="mt-3">
@@ -559,6 +595,16 @@ def create_production_app():
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Render markdown content if present
+        var rawEl = document.getElementById('raw-content');
+        var contentEl = document.getElementById('research-content');
+        if (rawEl && contentEl) {
+            var raw = JSON.parse(rawEl.textContent);
+            contentEl.innerHTML = marked.parse(raw);
+        }
+    </script>
 </body>
 </html>
         """, research=research, status_messages=status_messages, 
@@ -567,9 +613,13 @@ def create_production_app():
     @app.route('/api/research/<int:research_id>/status')
     def research_status_api(research_id):
         """Get research status as JSON."""
-        research = research_storage.get(research_id)
+        research = db.get_research_by_id(research_id)
         if not research:
             return jsonify({'error': 'Research not found'}), 404
+        
+        # Merge transient progress
+        progress_info = progress_tracker.get(research_id, {})
+        research['progress'] = progress_info.get('progress', 100 if research['status'] == 'completed' else 0)
         
         return jsonify(research)
     

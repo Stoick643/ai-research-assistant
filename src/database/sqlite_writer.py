@@ -20,7 +20,7 @@ logger = structlog.get_logger()
 class SQLiteWriter(ReportWriter):
     """SQLite database writer implementation with comprehensive research tracking."""
     
-    def __init__(self, database_path: str = "research_history.db"):
+    def __init__(self, database_path: str = "data/research_history.db"):
         """
         Initialize SQLite writer.
         
@@ -28,6 +28,7 @@ class SQLiteWriter(ReportWriter):
             database_path: Path to SQLite database file
         """
         self.database_path = Path(database_path)
+        self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.db_manager = DatabaseManager(database_path=str(self.database_path))
         self.logger = logger.bind(writer="sqlite", db_path=str(self.database_path))
         

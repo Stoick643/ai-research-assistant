@@ -17,7 +17,7 @@ logger = structlog.get_logger()
 class ResearchAnalytics:
     """Analytics engine for research history and patterns."""
     
-    def __init__(self, database_path: str = "research_history.db"):
+    def __init__(self, database_path: str = "data/research_history.db"):
         """
         Initialize analytics engine.
         

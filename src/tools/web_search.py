@@ -32,18 +32,19 @@ class SearchResponse:
     follow_up_questions: List[str] = None
     search_context: Optional[str] = None
     images: List[Dict[str, str]] = None
+    cache_hit: bool = False
 
 
 class WebSearchTool:
     """Tavily-powered web search tool optimized for AI agents."""
     
-    def __init__(self, api_key: Optional[str] = None):
-        # Hardcoded fallback for testing - remove in production
-        self.api_key = api_key or os.getenv("TAVILY_API_KEY") or "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"
+    def __init__(self, api_key: Optional[str] = None, search_cache=None):
+        self.api_key = api_key or os.getenv("TAVILY_API_KEY")
         if not self.api_key:
             raise ValueError("Tavily API key not found. Set TAVILY_API_KEY environment variable")
         
         self.client = TavilyClient(api_key=self.api_key)
+        self.search_cache = search_cache
         self.logger = logger.bind(tool="web_search")
         
     def _normalize_text(self, text: str) -> str:
@@ -91,6 +92,12 @@ class WebSearchTool:
         normalized_query = self._normalize_text(query)
         self.logger.info("Performing web search", query=normalized_query, max_results=max_results)
         
+        # Check cache first
+        if self.search_cache:
+            cached = self.search_cache.get(normalized_query, search_depth, max_results)
+            if cached is not None:
+                return self._parse_response(normalized_query, cached, include_answer, include_images, cache_hit=True)
+        
         try:
             # Run Tavily search in thread pool to avoid blocking
             loop = asyncio.get_event_loop()
@@ -107,56 +114,65 @@ class WebSearchTool:
                 )
             )
             
-            # Parse results into structured format  
-            results = []
-            
-            # Debug: Log the full response structure
-            self.logger.info("Tavily response debug", 
-                           response_type=type(response),
-                           response_keys=list(response.keys()) if isinstance(response, dict) else None,
-                           query=normalized_query)
-            
-            raw_results = response.get("results") if isinstance(response, dict) else None
-            
-            # Handle case where Tavily returns None
-            if raw_results is None:
-                self.logger.warning("Tavily returned None for results", query=normalized_query)
-                raw_results = []
-            elif not isinstance(raw_results, list):
-                self.logger.warning("Tavily returned non-list results", type=type(raw_results), query=normalized_query)
-                raw_results = []
-                
-            for result in raw_results:
-                search_result = SearchResult(
-                    title=self._normalize_text(result.get("title", "")),
-                    url=result.get("url", ""),
-                    content=self._normalize_text(result.get("content", "")),
-                    score=float(result.get("score", 0.0)),
-                    published_date=result.get("published_date")
-                )
-                results.append(search_result)
-            
-            search_response = SearchResponse(
-                query=normalized_query,
-                results=results,
-                answer=self._normalize_text(response.get("answer", "")) if include_answer and response.get("answer") else None,
-                follow_up_questions=[self._normalize_text(q) for q in (response.get("follow_up_questions") or [])],
-                search_context=self._normalize_text(response.get("search_context", "")),
-                images=response.get("images", []) if include_images else None
-            )
-            
-            self.logger.info(
-                "Web search completed", 
-                query=query, 
-                results_count=len(results),
-                has_answer=bool(search_response.answer)
-            )
-            
-            return search_response
+            # Store in cache before parsing
+            if self.search_cache and isinstance(response, dict):
+                self.search_cache.put(normalized_query, search_depth, max_results, response)
+
+            return self._parse_response(normalized_query, response, include_answer, include_images)
             
         except Exception as e:
             self.logger.error("Web search failed", query=query, error=str(e))
             raise RuntimeError(f"Web search failed: {str(e)}") from e
+
+    def _parse_response(
+        self,
+        query: str,
+        response: Dict[str, Any],
+        include_answer: bool = True,
+        include_images: bool = False,
+        cache_hit: bool = False,
+    ) -> SearchResponse:
+        """Parse a raw Tavily response dict into a SearchResponse."""
+        results = []
+
+        raw_results = response.get("results") if isinstance(response, dict) else None
+
+        if raw_results is None:
+            self.logger.warning("Tavily returned None for results", query=query)
+            raw_results = []
+        elif not isinstance(raw_results, list):
+            self.logger.warning("Tavily returned non-list results", type=type(raw_results), query=query)
+            raw_results = []
+
+        for result in raw_results:
+            search_result = SearchResult(
+                title=self._normalize_text(result.get("title", "")),
+                url=result.get("url", ""),
+                content=self._normalize_text(result.get("content", "")),
+                score=float(result.get("score", 0.0)),
+                published_date=result.get("published_date"),
+            )
+            results.append(search_result)
+
+        search_response = SearchResponse(
+            query=query,
+            results=results,
+            answer=self._normalize_text(response.get("answer", "")) if include_answer and response.get("answer") else None,
+            follow_up_questions=[self._normalize_text(q) for q in (response.get("follow_up_questions") or [])],
+            search_context=self._normalize_text(response.get("search_context", "")),
+            images=response.get("images", []) if include_images else None,
+            cache_hit=cache_hit,
+        )
+
+        self.logger.info(
+            "Web search completed",
+            query=query,
+            results_count=len(results),
+            has_answer=bool(search_response.answer),
+            cache_hit=cache_hit,
+        )
+
+        return search_response
     
     async def get_search_context(
         self, 

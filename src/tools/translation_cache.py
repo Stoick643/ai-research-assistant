@@ -29,8 +29,8 @@ class TranslationCache:
     
     def __init__(
         self, 
-        cache_path: str = "translation_cache.db",
-        ttl_hours: int = 24,
+        cache_path: str = "data/cache/translation_cache.db",
+        ttl_hours: int = 720,
         max_cache_size_mb: int = 100
     ):
         """
@@ -42,6 +42,7 @@ class TranslationCache:
             max_cache_size_mb: Maximum cache size in megabytes
         """
         self.cache_path = Path(cache_path)
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.ttl_hours = ttl_hours
         self.max_cache_size_mb = max_cache_size_mb
         self.logger = logger.bind(component="translation_cache")

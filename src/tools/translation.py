@@ -223,14 +223,15 @@ class TranslationTool:
         ('sl', 'en'): ['deepl', 'google', 'azure'],
         
         # Default preference for other pairs
-        'default': ['google', 'deepl', 'azure', 'mock']
+        'default': ['llm', 'google', 'deepl', 'azure', 'mock']
     }
     
     def __init__(
         self, 
-        default_provider: str = 'google',
+        default_provider: str = 'llm',
         enable_cache: bool = True,
-        cache_ttl_hours: int = 24
+        cache_ttl_hours: int = 720,
+        llm_client=None,
     ):
         """
         Initialize translation tool.
@@ -239,11 +240,13 @@ class TranslationTool:
             default_provider: Default translation provider
             enable_cache: Enable translation caching
             cache_ttl_hours: Cache time-to-live in hours
+            llm_client: LLM client for LLM-based translation (recommended)
         """
         self.providers = {}
         self.default_provider = default_provider
         self.enable_cache = enable_cache
         self.cache_ttl_hours = cache_ttl_hours
+        self.llm_client = llm_client
         self.logger = logger.bind(component="translation_tool")
         
         # Initialize providers (will be implemented in separate methods)
@@ -253,7 +256,17 @@ class TranslationTool:
         """Initialize available translation providers."""
         self.providers = {}
         
-        # Try to initialize Google Translate provider
+        # Try LLM provider first (best quality, uses existing API keys)
+        if self.llm_client:
+            try:
+                from .providers.llm_translate import LLMTranslateProvider
+                llm_provider = LLMTranslateProvider(llm_client=self.llm_client)
+                self.providers['llm'] = llm_provider
+                self.logger.info("LLM translation provider initialized")
+            except Exception as e:
+                self.logger.warning("Failed to initialize LLM translation provider", error=str(e))
+        
+        # Try Google Translate as fallback
         try:
             from .providers import GoogleTranslateProvider
             google_provider = GoogleTranslateProvider()
@@ -261,8 +274,9 @@ class TranslationTool:
             self.logger.info("Google Translate provider initialized")
         except Exception as e:
             self.logger.warning("Failed to initialize Google Translate provider", error=str(e))
-            
-            # Fallback to mock provider for testing
+        
+        # Mock provider as last resort
+        if not self.providers:
             try:
                 from .providers.mock_translate import MockTranslateProvider
                 mock_provider = MockTranslateProvider()

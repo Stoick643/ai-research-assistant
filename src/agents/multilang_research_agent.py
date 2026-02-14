@@ -67,7 +67,7 @@ class MultiLanguageResearchAgent(ResearchAgent):
         # Initialize translation tool if enabled
         if self.enable_translation:
             try:
-                self.translation_tool = TranslationTool()
+                self.translation_tool = TranslationTool(llm_client=llm_client)
                 self.logger.info(
                     "Translation capabilities enabled",
                     default_language=default_language,

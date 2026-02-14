@@ -32,7 +32,7 @@ class DatabaseManager:
             self.database_url = f"sqlite:///{database_path}"
         else:
             # Default to local database in project directory
-            default_path = Path("research_history.db").absolute()
+            default_path = Path("data/research_history.db").absolute()
             self.database_url = f"sqlite:///{default_path}"
         
         self.engine = None

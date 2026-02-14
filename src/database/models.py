@@ -5,8 +5,7 @@ SQLAlchemy models for research history and analytics.
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime, ForeignKey, Boolean, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.sql import func
 import structlog
 
@@ -259,13 +258,18 @@ def create_database_engine(database_url: str):
 
 
 def create_tables(engine):
-    """Create all tables in the database."""
+    """Create all tables in the database (skips existing tables)."""
     try:
-        Base.metadata.create_all(engine)
+        Base.metadata.create_all(engine, checkfirst=True)
         logger.info("Database tables created successfully")
     except Exception as e:
-        logger.error("Failed to create database tables", error=str(e))
-        raise
+        # On persistent volumes, tables may already exist from a previous deploy.
+        # Log and continue — the tables are there, just not freshly created.
+        if "already exists" in str(e):
+            logger.warning("Tables already exist, continuing", error=str(e))
+        else:
+            logger.error("Failed to create database tables", error=str(e))
+            raise
 
 
 def get_session_factory(engine):

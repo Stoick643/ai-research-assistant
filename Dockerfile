@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG PYTHON_VERSION=3.13.11
-
+ARG PYTHON_VERSION=3.13
 FROM python:${PYTHON_VERSION}-slim
 
 LABEL fly_launch_runtime="flask"

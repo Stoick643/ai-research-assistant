@@ -154,23 +154,28 @@
 
 ---
 
-## Phase 7: Semantic Search Cache (sqlite-vec)
+## Phase 7: Semantic Search Cache (sqlite-vec) ✅ Done
 
 **Goal**: Cache hits for semantically similar queries, not just exact matches.
 
-### Research needed
-- Evaluate `sqlite-vec` as embedded vector DB
-- Choose embedding approach: OpenAI embeddings API vs lightweight local model
-- Define similarity threshold (configurable)
+### Embedding providers (`src/tools/embeddings.py`) ✅
+- `HashEmbedding` — zero-dependency default, hashing trick with uni/bi/trigrams, 256 dims
+- `OpenAIEmbedding` — high-quality via `text-embedding-3-small` (when OpenAI key available)
+- `create_embedding_provider()` — auto-selects best available
+- Provider-aware similarity thresholds: 0.20 (hash) vs 0.85 (OpenAI)
 
-### Changes to `src/tools/search_cache.py`
-- On exact cache miss → do vector similarity search against stored query embeddings
-- "quantum computing basics" hits cache from "introduction to quantum computing"
-- Fallback: if sqlite-vec unavailable, exact match still works
+### Semantic cache (`src/tools/search_cache.py`) ✅
+- Rewrote with dual lookup: exact match first → vector fallback on miss
+- sqlite-vec `vec0` virtual table + metadata table, same DB file
+- "quantum computing basics" hits cache from "quantum computing fundamentals" (cosine 0.50)
+- Respects search_depth and max_results (semantic match only when params match)
+- Graceful fallback: if sqlite-vec or embedding provider unavailable, exact match still works
+- Stats track exact hits, semantic hits, and misses separately
 
-### New dependency
-- `sqlite-vec` package
-- Embedding provider (TBD)
+### Wiring ✅
+- `app.py` creates embedding provider (auto-detects OpenAI key), passes to SearchCache
+- Added `sqlite-vec>=0.1.0` and `numpy>=1.24.0` to requirements.txt + pyproject.toml
+- 20 new tests (135 total passing)
 
 ---
 

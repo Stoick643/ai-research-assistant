@@ -8,10 +8,13 @@ An AI-powered research assistant that conducts web searches, synthesizes finding
 
 - **Web Research**: Automated web search via Tavily API with source analysis
 - **Multi-LLM Support**: OpenAI, Anthropic, and DeepSeek with automatic fallback chains
+- **Streaming**: LLM responses stream into live preview during research
 - **Multi-Language Reports**: Research in English, translated to 12+ languages
-- **Rate Limiting**: Built-in rate limiting and request queuing
+- **Semantic Cache**: sqlite-vec powered vector search — similar queries hit cache automatically
+- **BYOK**: Bring your own API keys via Settings page (never stored in database)
+- **CLI**: Full command-line interface alongside the web UI
+- **Rate Limiting**: Built-in rate limiting, request queuing, and graceful degradation
 - **Research History**: SQLite-backed research tracking and analytics
-- **Flask Web UI**: Browser-based interface for submitting and viewing research
 
 ## Quick Start
 
@@ -31,53 +34,62 @@ cp .env.example .env
 ### 3. Run
 
 ```bash
-# Development
+# Web UI
 python app.py
 
-# Production
-gunicorn app:app --bind 0.0.0.0:5003 --workers 2 --timeout 120
+# CLI
+python cli.py "quantum computing trends 2025"
+python cli.py "AI safety" --depth advanced --lang sl --output report.md
+```
+
+## CLI Usage
+
+```bash
+python cli.py "research topic"              # Basic research
+python cli.py "topic" --depth advanced      # Thorough search (2x credits)
+python cli.py "topic" --lang sl             # Translate to Slovenian
+python cli.py "topic" --focus "area1,area2" # Focus on specific areas
+python cli.py "topic" --output report.md    # Save to file
+python cli.py "topic" --no-cache            # Skip cache, force fresh
 ```
 
 ## Project Structure
 
 ```
-├── app.py                          # Flask web application (main entrypoint)
+├── app.py                          # Flask web app (thin HTTP layer)
+├── cli.py                          # CLI interface
 ├── src/
+│   ├── services/                   # Business logic layer
+│   │   └── research_service.py     # Core research orchestration
 │   ├── agents/                     # Agent implementations
-│   │   ├── base.py                 # Base agent class
-│   │   ├── reasoning.py            # Step-by-step reasoning agent
-│   │   ├── research_agent.py       # Web research agent
+│   │   ├── research_agent.py       # Web research agent (streaming)
 │   │   └── multilang_research_agent.py  # Multi-language research
 │   ├── tools/                      # Tool integrations
 │   │   ├── web_search.py           # Tavily web search
+│   │   ├── search_cache.py         # Exact + semantic search cache
+│   │   ├── embeddings.py           # Embedding providers (hash, OpenAI)
 │   │   ├── report_writer.py        # Markdown report generation
-│   │   ├── translation.py          # Translation framework
-│   │   └── translation_cache.py    # Translation caching
+│   │   └── translation.py          # Translation framework
 │   ├── database/                   # Data persistence
-│   │   ├── database.py             # Database setup
 │   │   ├── models.py               # SQLAlchemy models
-│   │   ├── sqlite_writer.py        # Research history writer
-│   │   └── analytics.py            # Research analytics
+│   │   └── sqlite_writer.py        # Research history writer
 │   └── utils/                      # Utilities
-│       ├── llm.py                  # LLM client abstractions
-│       ├── rate_limiting.py        # Rate limiting & fallback chains
-│       ├── config.py               # Configuration management
-│       └── logger.py               # Structured logging
-├── examples/                       # Example scripts
-├── tests/                          # Test suite
-├── docs/                           # Documentation
-├── .env.example                    # Environment variable template
-├── Procfile                        # Production deployment (Render)
-└── pyproject.toml                  # Project metadata & dependencies
+│       ├── llm.py                  # LLM clients (OpenAI, Anthropic)
+│       └── rate_limiting.py        # Rate limiting, fallback chains, streaming
+├── templates/                      # Flask HTML templates
+├── tests/                          # 156 tests (pytest)
+└── docs/                           # Documentation & roadmap
 ```
 
-## API Keys Required
+## API Keys
 
 | Service | Required | Purpose |
 |---------|----------|---------|
 | Tavily | Yes | Web search |
-| OpenAI / DeepSeek / Anthropic | At least one | LLM reasoning & synthesis |
+| OpenAI / DeepSeek / Anthropic | At least one | LLM reasoning & streaming |
 | Google Translate | No | Optional translation provider |
+
+Users can also bring their own keys via the `/settings` page (BYOK).
 
 ## Development
 
@@ -90,12 +102,9 @@ pytest
 
 # Format code
 black . && isort .
-
-# Type checking
-mypy src/
 ```
 
 ## Deployment
 
-The app is configured for deployment on Render (see `render.yaml` and `Procfile`).
-See [DEPLOYMENT.md](DEPLOYMENT.md) for details.
+Deployed on Fly.io with GitHub Actions CI/CD.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for full development history.

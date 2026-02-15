@@ -5,16 +5,21 @@ An AI-powered research assistant that conducts web searches, synthesizes finding
 ## Project Structure
 
 ```
-├── app.py                          # Flask web app (main entrypoint)
+├── app.py                          # Flask web app (thin HTTP layer)
+├── cli.py                          # CLI interface
 ├── src/
+│   ├── services/                   # Business logic layer
+│   │   └── research_service.py     # Core research orchestration
 │   ├── agents/                     # Agent implementations
 │   │   ├── base.py                 # Base agent class
 │   │   ├── reasoning.py            # Step-by-step reasoning agent
 │   │   ├── reactive.py             # Event-driven agent with tools
-│   │   ├── research_agent.py       # Web research agent
+│   │   ├── research_agent.py       # Web research agent (streaming)
 │   │   └── multilang_research_agent.py  # Multi-language research
 │   ├── tools/                      # Tool integrations
 │   │   ├── web_search.py           # Tavily web search
+│   │   ├── search_cache.py         # Exact + semantic search cache
+│   │   ├── embeddings.py           # Embedding providers (hash, OpenAI)
 │   │   ├── report_writer.py        # Markdown report generation
 │   │   ├── translation.py          # Translation framework
 │   │   ├── translation_cache.py    # Translation caching
@@ -27,12 +32,13 @@ An AI-powered research assistant that conducts web searches, synthesizes finding
 │   │   └── analytics.py            # Research analytics
 │   └── utils/                      # Utilities
 │       ├── llm.py                  # LLM client abstractions (OpenAI, Anthropic)
-│       ├── rate_limiting.py        # Rate limiting, fallback chains, request queuing
+│       ├── rate_limiting.py        # Rate limiting, fallback chains, streaming, request queuing
 │       ├── config.py               # Configuration management
 │       └── logger.py               # Structured logging
+├── templates/                      # Flask HTML templates
 ├── examples/                       # Example agent scripts
-├── tests/                          # Test suite (pytest)
-├── docs/                           # Additional documentation
+├── tests/                          # Test suite (pytest, 156 tests)
+├── docs/                           # Documentation & roadmap
 └── pyproject.toml                  # Dependencies & project config
 ```
 
@@ -47,17 +53,23 @@ cp .env.example .env
 ## Running
 
 ```bash
-# Development server
+# Web UI (development)
 python app.py
 
-# Production
+# Web UI (production)
 gunicorn app:app --bind 0.0.0.0:5003 --workers 2 --timeout 120
+
+# CLI
+python cli.py "quantum computing trends 2025"
+python cli.py "AI safety" --depth advanced --lang sl
+python cli.py "climate change" --focus "ocean,arctic" --output report.md
+python cli.py "topic" --no-cache    # Force fresh research
 ```
 
 ## Key Commands
 
 ```bash
-pytest                              # Run tests
+pytest                              # Run tests (156 tests)
 pytest --cov=src                    # Tests with coverage
 black . && isort .                  # Format code
 mypy src/                           # Type checking
@@ -65,11 +77,14 @@ mypy src/                           # Type checking
 
 ## Architecture
 
-- **Entrypoint**: `app.py` — Flask app with inline templates, background research via threads
+- **Service layer**: `src/services/research_service.py` — all business logic (key resolution, research orchestration, caching, DB persistence)
+- **Web UI**: `app.py` — thin Flask wrapper around the service layer
+- **CLI**: `cli.py` — terminal interface using the same service layer
 - **Agent hierarchy**: BaseAgent → ReasoningAgent → ResearchAgent → MultiLanguageResearchAgent
-- **LLM providers**: OpenAI, Anthropic, DeepSeek with automatic fallback chains (see `src/utils/rate_limiting.py`)
-- **Web search**: Tavily API (`src/tools/web_search.py`)
-- **Storage**: SQLite for research history and translation cache
+- **LLM providers**: OpenAI, Anthropic, DeepSeek with automatic fallback chains and streaming
+- **Web search**: Tavily API with exact-match + semantic vector cache (sqlite-vec)
+- **BYOK**: Users can provide their own API keys via Settings page (session-based, never stored in DB)
+- **Storage**: SQLite for research history, search cache, and translation cache
 - **All agent operations are async** (asyncio), run in background threads from Flask
 
 ## API Keys
@@ -77,5 +92,7 @@ mypy src/                           # Type checking
 | Service | Required | Purpose |
 |---------|----------|---------|
 | Tavily | Yes | Web search |
-| OpenAI / DeepSeek / Anthropic | At least one | LLM reasoning |
-| Google Translate | No | Optional translation |
+| OpenAI / DeepSeek / Anthropic | At least one | LLM reasoning & streaming |
+| Google Translate | No | Optional translation provider |
+
+Users can also bring their own keys (BYOK) via the `/settings` page.

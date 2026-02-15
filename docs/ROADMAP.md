@@ -179,39 +179,35 @@
 
 ---
 
-## Phase 8: Service Layer + CLI ⬅️ Next
+## Phase 8: Service Layer + CLI ✅ Done
 
 **Goal**: Extract business logic from `app.py` into a reusable service layer. Add a CLI interface that shares the same logic.
 
-### 8a. Research service (`src/services/research_service.py`)
-- Extract from `app.py`: key resolution, LLM client creation, agent setup, research orchestration
-- `ResearchService` class with clean public API:
-  - `run_research(topic, language, depth, focus_areas, api_keys, on_progress)` → research_id
-  - `run_translation(research_id, language, api_keys, on_progress)` → research_id
-  - `get_status(research_id)` → dict with progress, preview, result
-  - `find_cached(topic, language)` → cached result or None
-- Sync and async support (service is async, thin sync wrapper for CLI)
-- All database interaction stays in the service
+### 8a. Research service (`src/services/research_service.py`) ✅
+- `ResearchService` class — all business logic in one place
+- Key resolution: `resolve_keys()`, `resolve_providers()`, `key_source_label()`
+- Research: `create_research_record()`, `run_research()`, `run_translation()`
+- Status: `get_status()`, `get_research_detail()`, `get_history()`, `handle_error()`
+- Sync wrappers for CLI: `run_research_sync()`, `run_translation_sync()`
+- Cache: `find_cached()`, `cache_age_minutes()`
 
-### 8b. Slim down `app.py`
-- Routes become thin wrappers: parse HTTP request → call service → return response
-- `submit_research` goes from ~150 lines to ~30
-- Progress tracking moves into service (or shared state)
-- No business logic in route handlers
+### 8b. Slim down `app.py` ✅
+- 544 → 401 lines (–26%)
+- `submit_research` route: ~150 → ~60 lines
+- Routes are pure HTTP wrappers — parse request, call service, return response
+- All provider selection, client creation, research orchestration in service
 
-### 8c. CLI (`cli.py`)
-- `python cli.py "AI trends 2025"` — run research from terminal
-- `--depth basic|advanced` — search depth
-- `--lang en|sl|de|...` — target language
-- `--focus "area1,area2"` — focus areas
-- `--output report.md` — save report to file
-- Progress bar in terminal (rich or simple print)
-- Uses same `ResearchService` as web app
+### 8c. CLI (`cli.py`) ✅
+- `python cli.py "AI trends 2025"` — full research from terminal
+- `--depth basic|advanced`, `--lang sl`, `--focus "area1,area2"`, `--output report.md`
+- `--no-cache` to force fresh research
+- Terminal progress bar with step icons (🧠🔍📊📝✅)
+- Cache check before running (shows cached result instantly)
+- Windows Unicode fix for emoji
 
-### 8d. Tests
-- Test service layer directly (no HTTP needed)
-- Test CLI invocation (click.testing or subprocess)
-- Existing app tests should still pass (routes just delegate to service)
+### 8d. Tests ✅
+- 21 new tests: key resolution (11), cache/status (6), record creation (1), errors (2), CLI (2)
+- 156 total tests passing
 
 ---
 

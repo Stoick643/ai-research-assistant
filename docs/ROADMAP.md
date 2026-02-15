@@ -179,9 +179,44 @@
 
 ---
 
+## Phase 8: Service Layer + CLI ⬅️ Next
+
+**Goal**: Extract business logic from `app.py` into a reusable service layer. Add a CLI interface that shares the same logic.
+
+### 8a. Research service (`src/services/research_service.py`)
+- Extract from `app.py`: key resolution, LLM client creation, agent setup, research orchestration
+- `ResearchService` class with clean public API:
+  - `run_research(topic, language, depth, focus_areas, api_keys, on_progress)` → research_id
+  - `run_translation(research_id, language, api_keys, on_progress)` → research_id
+  - `get_status(research_id)` → dict with progress, preview, result
+  - `find_cached(topic, language)` → cached result or None
+- Sync and async support (service is async, thin sync wrapper for CLI)
+- All database interaction stays in the service
+
+### 8b. Slim down `app.py`
+- Routes become thin wrappers: parse HTTP request → call service → return response
+- `submit_research` goes from ~150 lines to ~30
+- Progress tracking moves into service (or shared state)
+- No business logic in route handlers
+
+### 8c. CLI (`cli.py`)
+- `python cli.py "AI trends 2025"` — run research from terminal
+- `--depth basic|advanced` — search depth
+- `--lang en|sl|de|...` — target language
+- `--focus "area1,area2"` — focus areas
+- `--output report.md` — save report to file
+- Progress bar in terminal (rich or simple print)
+- Uses same `ResearchService` as web app
+
+### 8d. Tests
+- Test service layer directly (no HTTP needed)
+- Test CLI invocation (click.testing or subprocess)
+- Existing app tests should still pass (routes just delegate to service)
+
+---
+
 ## Future ideas (unprioritized)
 - User accounts & per-user research history
 - Compare two research sessions side by side
 - Follow-up research ("research deeper" using Tavily follow-up questions)
-- JSON API for programmatic access
-- CLI and web share a clean service layer
+- JSON API for programmatic access (FastAPI wrapper around service layer)
